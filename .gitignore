@@ -1,0 +1,67 @@
+# Dependencias
+node_modules/
+.pnp
+.pnp.js
+
+# Builds
+dist/
+dist-electron/
+dist-installer/
+build/
+out/
+
+# Variables de entorno — NUNCA subir al repo
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Base de datos local (Electron offline)
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Backups locales
+backups/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Cache de herramientas
+.vite/
+.cache/
+.parcel-cache/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Electron builder
+release/
+
+# Archivos de prueba temporales
+test-*.js
+{console.log*
+
+# Imágenes y archivos que no son código
+*.png
+*.jpg
+*.jpeg
+*.ico
+!public/
+!build/icons/
+!electron/assets/

@@ -1,0 +1,17 @@
+export const s = {
+  overlay:    { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
+  modalCard:  { background: '#FFF', borderRadius: 10, padding: 28, width: 560, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', maxHeight: '85vh', overflow: 'auto', color: '#1a1a1a' },
+  modalHeader:{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  modalTitle: { fontSize: 18, fontWeight: 700, margin: 0, color: '#1a1a1a' },
+  btnCerrar:  { background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', padding: 4 },
+  desc:       { fontSize: 13, color: '#6B7280', margin: '0 0 20px' },
+  loading:    { textAlign: 'center', color: '#6B7280', padding: 20 },
+  negCard:    { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 16 },
+  negNombre:  { margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: '#1E3A5F' },
+  fieldLabel: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 },
+  fieldInput: { padding: '8px 10px', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 13, color: '#1a1a1a', width: '100%' },
+  preview:    { padding: '8px 12px', background: '#FFF', border: '1px solid #D1D5DB', borderRadius: 6, fontSize: 14, fontFamily: 'monospace', fontWeight: 700, color: '#1E3A5F', minWidth: 100 },
+  btnGuardar: { padding: '8px 18px', background: '#1E3A5F', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  hint:       { fontSize: 11, color: '#9CA3AF', margin: '3px 0 0' },
+  checkLabel: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#1a1a1a' },
+}
