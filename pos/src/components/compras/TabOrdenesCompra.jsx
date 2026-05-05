@@ -12,7 +12,7 @@ const fmt = (f) => new Date(f).toLocaleDateString('es-MX', { day: '2-digit', mon
 // ── Modal: Recibir mercancía ──────────────────────────────────────────────────
 function ModalRecibir({ orden, onClose, onDone }) {
   const [items, setItems]     = useState(
-    (orden.items || []).map(i => ({ ...i, cantidad_recibida: String(i.cantidad_pedida), costo_nuevo: String(i.costo_unitario || ''), precio_nuevo: '' }))
+    (orden.items || []).map(i => ({ ...i, cantidad_recibida: String(i.cantidad_pedida), costo_nuevo: String(i.costo_unitario || ''), precio_nuevo: '', lote: '', fecha_caducidad: '' }))
   )
   const [guardando, setGuardando] = useState(false)
   const [notas, setNotas]     = useState('')
@@ -21,21 +21,32 @@ function ModalRecibir({ orden, onClose, onDone }) {
   const setItem = (idx, campo, val) =>
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [campo]: val } : it))
 
+  const totalCompra = items.reduce((s, it) => {
+    const costo = parseFloat(it.costo_nuevo || it.costo_unitario) || 0
+    const qty   = parseFloat(it.cantidad_recibida) || 0
+    return s + costo * qty
+  }, 0)
+
   const guardar = async () => {
     for (const it of items) {
       if (!it.cantidad_recibida || parseFloat(it.cantidad_recibida) <= 0) {
         setError(`Ingresa la cantidad recibida para: ${it.nombre}`); return
       }
+      if (it.controla_lote && !it.lote.trim()) {
+        setError(`"${it.nombre}" requiere número de lote`); return
+      }
     }
     setGuardando(true); setError('')
     try {
-      const res = await api.recibirOrdenCompra(orden.id, {
+      await api.recibirOrdenCompra(orden.id, {
         notas,
         items: items.map(it => ({
           producto_id:      it.producto_id,
           cantidad_recibida: parseFloat(it.cantidad_recibida),
           costo_unitario:   it.costo_nuevo  ? parseFloat(it.costo_nuevo)  : it.costo_unitario || null,
           precio_nuevo:     it.precio_nuevo ? parseFloat(it.precio_nuevo) : null,
+          lote:             it.lote.trim()  || null,
+          fecha_caducidad:  it.fecha_caducidad || null,
         })),
       })
       onDone()
@@ -60,6 +71,8 @@ function ModalRecibir({ orden, onClose, onDone }) {
                 <th style={{ ...e.th, width: 90 }}>Recibido</th>
                 <th style={{ ...e.th, width: 100 }}>Nuevo Costo</th>
                 <th style={{ ...e.th, width: 100 }}>Nuevo Precio</th>
+                <th style={{ ...e.th, width: 110 }}>Lote</th>
+                <th style={{ ...e.th, width: 120 }}>Caducidad</th>
               </tr>
             </thead>
             <tbody>
@@ -67,6 +80,7 @@ function ModalRecibir({ orden, onClose, onDone }) {
                 <tr key={it.id} style={idx % 2 === 1 ? { background: '#fafaf8' } : undefined}>
                   <td style={{ ...e.td, textAlign: 'left', fontWeight: 600 }}>
                     {it.nombre}
+                    {it.controla_lote && <span style={{ fontSize: 9, color: '#1E40AF', marginLeft: 5, fontWeight: 700 }}>LOTE</span>}
                     {it.stock_actual !== null && (
                       <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>
                         (hay {it.stock_actual})
@@ -91,10 +105,28 @@ function ModalRecibir({ orden, onClose, onDone }) {
                       value={it.precio_nuevo}
                       onChange={ev => setItem(idx, 'precio_nuevo', ev.target.value)} />
                   </td>
+                  <td style={e.td}>
+                    <input className="pos-input" style={{ ...e.inputTabla, width: 100 }}
+                      placeholder={it.controla_lote ? 'Requerido' : '—'}
+                      value={it.lote}
+                      onChange={ev => setItem(idx, 'lote', ev.target.value)} />
+                  </td>
+                  <td style={e.td}>
+                    <input className="pos-input" style={{ ...e.inputTabla, width: 110 }} type="date"
+                      value={it.fecha_caducidad}
+                      onChange={ev => setItem(idx, 'fecha_caducidad', ev.target.value)} />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div style={{ padding: '8px 16px', background: '#F0FDF4', borderTop: '1px solid #D1FAE5', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontSize: 12, color: '#6B7280' }}>Total de la compra:</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: '#15803D' }}>
+            ${totalCompra.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
         </div>
 
         <div style={e.recibirFooter}>

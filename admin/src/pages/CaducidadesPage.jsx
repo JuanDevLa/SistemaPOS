@@ -1,6 +1,98 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
 
+// ── Formulario: Registrar lote manualmente ─────────────────────────────────
+function FormAgregarLote({ negocioId }) {
+  const [abierto, setAbierto]       = useState(false)
+  const [busq, setBusq]             = useState('')
+  const [resultados, setResultados] = useState([])
+  const [producto, setProducto]     = useState(null)
+  const [lote, setLote]             = useState('')
+  const [caducidad, setCaducidad]   = useState('')
+  const [cantidad, setCantidad]     = useState('')
+  const [guardando, setGuardando]   = useState(false)
+  const [msg, setMsg]               = useState('')
+
+  const buscar = async () => {
+    if (!busq.trim() || !negocioId) return
+    const res = await api.buscarProductos(busq)
+    setResultados(Array.isArray(res) ? res.filter(p => p.controla_lote) : [])
+  }
+
+  const seleccionar = (p) => {
+    setProducto(p); setResultados([]); setBusq(p.nombre)
+  }
+
+  const guardar = async () => {
+    if (!producto || !lote.trim() || !cantidad) { setMsg('Completa producto, lote y cantidad'); return }
+    setGuardando(true); setMsg('')
+    try {
+      await api.crearLoteInicial({
+        producto_id:     producto.id,
+        negocio_id:      parseInt(negocioId),
+        lote:            lote.trim(),
+        fecha_caducidad: caducidad || null,
+        cantidad:        parseFloat(cantidad),
+      })
+      setMsg(`Lote "${lote}" registrado para ${producto.nombre}`)
+      setProducto(null); setBusq(''); setLote(''); setCaducidad(''); setCantidad('')
+    } catch (e) { setMsg(e.message || 'Error al guardar') }
+    setGuardando(false)
+  }
+
+  if (!abierto) {
+    return (
+      <button style={s.btnLote} onClick={() => setAbierto(true)}>
+        + Registrar lote de producto existente
+      </button>
+    )
+  }
+
+  return (
+    <div style={s.loteCard}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: '#1E3A5F' }}>Registrar lote</span>
+        <button onClick={() => setAbierto(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#6B7280' }}>&#10005;</button>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ position: 'relative' }}>
+          <label style={s.flabel}>Producto (controla lote)</label>
+          <input style={s.fselect} placeholder="Buscar por nombre..." value={busq}
+            onChange={e => { setBusq(e.target.value); setProducto(null) }}
+            onKeyDown={e => e.key === 'Enter' && buscar()} />
+          <button style={{ ...s.btnBuscar, marginLeft: 6 }} onClick={buscar}>Buscar</button>
+          {resultados.length > 0 && (
+            <div style={s.dropdown}>
+              {resultados.map(p => (
+                <div key={p.id} style={s.dropdownItem} onClick={() => seleccionar(p)}>
+                  {p.nombre} {p.codigo_barras ? `· ${p.codigo_barras}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <label style={s.flabel}>No. de Lote *</label>
+          <input style={s.fselect} placeholder="ej. L-2025-001" value={lote} onChange={e => setLote(e.target.value)} />
+        </div>
+        <div>
+          <label style={s.flabel}>Fecha caducidad</label>
+          <input style={s.fselect} type="date" value={caducidad} onChange={e => setCaducidad(e.target.value)} />
+        </div>
+        <div>
+          <label style={s.flabel}>Cantidad *</label>
+          <input style={{ ...s.fselect, width: 90 }} type="number" min="0" step="1" placeholder="0"
+            value={cantidad} onChange={e => setCantidad(e.target.value)} />
+        </div>
+        <button style={s.btnBuscar} onClick={guardar} disabled={guardando || !producto}>
+          {guardando ? 'Guardando...' : 'Registrar'}
+        </button>
+      </div>
+      {msg && <p style={{ marginTop: 8, fontSize: 13, color: msg.startsWith('Lote') ? '#15803D' : '#DC2626', fontWeight: 600 }}>{msg}</p>}
+    </div>
+  )
+}
+
 const FILTROS_DIAS = [
   { label: 'Vencidos + 30 días', value: 30 },
   { label: 'Vencidos + 60 días', value: 60 },
@@ -47,6 +139,8 @@ export default function CaducidadesPage() {
           <p style={s.pageSub}>Lotes próximos a vencer y vencidos con stock disponible</p>
         </div>
       </div>
+
+      <FormAgregarLote negocioId={negocioId} />
 
       {/* Filtros */}
       <div style={s.filtros}>
@@ -157,4 +251,8 @@ const s = {
   td:         { padding: '11px 12px', fontSize: 13, color: '#1F2937' },
   badge:      { padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 },
   empty:      { padding: 40, textAlign: 'center', color: '#6B7280', background: '#F9FAFB', borderRadius: 8 },
+  btnLote:    { marginBottom: 20, padding: '8px 16px', background: '#EFF6FF', color: '#1E40AF', border: '1px solid #BFDBFE', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  loteCard:   { background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '16px 20px', marginBottom: 20 },
+  dropdown:   { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #D1D5DB', borderRadius: 6, zIndex: 100, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
+  dropdownItem: { padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: '#1F2937', borderBottom: '1px solid #F3F4F6' },
 }

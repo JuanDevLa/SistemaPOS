@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { api } from '../api'
+import { useAuth } from '../context/AuthContext'
 import ModalProductoForm      from '../components/productos/ModalProductoForm'
 import ModalImportarProductos from '../components/productos/ModalImportarProductos'
 
 export default function ProductosPage() {
+  const { usuario } = useAuth()
   const [productos, setProductos]       = useState([])
   const [departamentos, setDepartamentos] = useState([])
   const [cargando, setCargando]         = useState(true)
@@ -163,6 +165,7 @@ export default function ProductosPage() {
         <ModalProductoForm
           producto={productoEditar}
           departamentos={departamentos}
+          negocioId={usuario?.negocio_id}
           onSuccess={cargar}
           onClose={() => setModal(null)}
         />

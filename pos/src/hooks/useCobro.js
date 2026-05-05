@@ -68,7 +68,9 @@ export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteA
           : metodoAUsar === 'mixto' ? parseFloat(pagoCon)
           : metodoAUsar === 'credito' && pagadoCredito > 0 ? pagadoCredito
           : null,
-        monto_tarjeta:  metodoAUsar === 'mixto'         ? parseFloat((total - parseFloat(pagoCon)).toFixed(2)) : undefined,
+        monto_tarjeta:  metodoAUsar === 'mixto'   ? parseFloat((total - parseFloat(pagoCon)).toFixed(2))
+          :             metodoAUsar === 'tarjeta' ? total
+          : undefined,
         referencia:     metodoAUsar === 'tarjeta'        ? (overrides.referenciaTarjeta ?? referenciaTarjeta) || undefined
           :             metodoAUsar === 'mixto'          ? overrides.referenciaTarjeta || undefined
           :             metodoAUsar === 'transferencia'  ? referenciaTransferencia || undefined

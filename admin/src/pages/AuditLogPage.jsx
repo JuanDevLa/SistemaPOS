@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react'
 import { api } from '../api'
 
 const ACCIONES_LABEL = {
+  venta_creada:            'Venta registrada',
+  venta_cancelada:         'Venta cancelada',
+  devolucion_parcial:      'Devolución parcial',
   permisos_modificados:    'Permisos modificados',
   descuento_aplicado:      'Descuento aplicado',
   efectivo_entrada:        'Entrada de efectivo',
   efectivo_salida:         'Salida de efectivo',
   ticket_cancelado:        'Ticket cancelado',
   articulo_eliminado:      'Artículo eliminado de venta',
+  mercancia_recibida:      'Mercancía recibida (orden)',
   mercancia_agregada:      'Mercancía agregada',
   ajuste_inventario:       'Ajuste de inventario',
   credito_otorgado:        'Crédito otorgado',

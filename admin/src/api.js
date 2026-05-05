@@ -60,6 +60,8 @@ export const api = {
     request('DELETE', `/productos/${id}`),
   importarProductos: (productos) =>
     request('POST', '/productos/importar', { productos }),
+  crearLoteInicial: (data) =>
+    request('POST', '/lotes', data),
 
   // Inventario
   listarInventario: (negocio_id) =>

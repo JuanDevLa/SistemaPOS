@@ -15,8 +15,12 @@ export default function DepartamentosPage() {
 
   const cargar = async () => {
     setCargando(true)
-    const res = await api.listarDepartamentos()
-    setDepartamentos(Array.isArray(res) ? res : [])
+    try {
+      const res = await api.listarDepartamentos()
+      setDepartamentos(Array.isArray(res) ? res : [])
+    } catch {
+      setDepartamentos([])
+    }
     setCargando(false)
   }
 

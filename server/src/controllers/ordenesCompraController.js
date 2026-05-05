@@ -1,4 +1,5 @@
-const pool = require('../db/client')
+const pool  = require('../db/client')
+const audit = require('../services/auditService')
 
 const listar = async (req, reply) => {
   const { negocio_id, estado } = req.query
@@ -35,7 +36,7 @@ const detalle = async (req, reply) => {
   if (!orden) return reply.code(404).send({ error: 'Orden no encontrada' })
 
   const { rows: items } = await pool.query(`
-    SELECT oci.*, pr.nombre, pr.codigo_barras,
+    SELECT oci.*, pr.nombre, pr.codigo_barras, pr.controla_lote,
            d.nombre AS departamento,
            inv.cantidad AS stock_actual
     FROM ordenes_compra_items oci
@@ -99,11 +100,20 @@ const recibir = async (req, reply) => {
       VALUES ($1, $2, $3, $4) RETURNING id
     `, [orden.negocio_id, orden.proveedor_nombre, orden.proveedor_id, notas || null])
 
+    // Obtener cuáles productos controlan lote
+    const productoIds = items.map(i => i.producto_id).filter(Boolean)
+    const { rows: prodRows } = await client.query(
+      'SELECT id, controla_lote FROM productos WHERE id = ANY($1)',
+      [productoIds]
+    )
+    const loteCtrlMap = {}
+    prodRows.forEach(r => { loteCtrlMap[r.id] = r.controla_lote })
+
     for (const item of items) {
       await client.query(`
-        INSERT INTO entradas_mercancia_items (entrada_id, producto_id, cantidad, costo_unitario)
-        VALUES ($1, $2, $3, $4)
-      `, [entrada.id, item.producto_id, item.cantidad_recibida, item.costo_unitario || null])
+        INSERT INTO entradas_mercancia_items (entrada_id, producto_id, cantidad, costo_unitario, lote, fecha_caducidad)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [entrada.id, item.producto_id, item.cantidad_recibida, item.costo_unitario || null, item.lote || null, item.fecha_caducidad || null])
 
       // Actualizar inventario
       await client.query(`
@@ -113,6 +123,16 @@ const recibir = async (req, reply) => {
         DO UPDATE SET cantidad = inventario.cantidad + EXCLUDED.cantidad,
                       actualizado_en = NOW()
       `, [item.producto_id, orden.negocio_id, item.cantidad_recibida])
+
+      // Si el producto controla lote, registrar en producto_lotes (fuente FEFO)
+      if (loteCtrlMap[item.producto_id] && item.lote) {
+        await client.query(`
+          INSERT INTO producto_lotes (producto_id, negocio_id, lote, fecha_caducidad, cantidad)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (producto_id, negocio_id, lote)
+          DO UPDATE SET cantidad = producto_lotes.cantidad + EXCLUDED.cantidad
+        `, [item.producto_id, orden.negocio_id, item.lote, item.fecha_caducidad || null, item.cantidad_recibida])
+      }
 
       await client.query(`
         INSERT INTO movimientos_inventario (producto_id, negocio_id, tipo, cantidad, referencia_id, notas)
@@ -139,8 +159,36 @@ const recibir = async (req, reply) => {
       UPDATE ordenes_compra SET estado = 'recibida', entrada_id = $1, recibida_en = NOW() WHERE id = $2
     `, [entrada.id, id])
 
+    // Total de la compra para auditoría
+    const totalCompra = items.reduce((s, it) => {
+      const costo = parseFloat(it.costo_unitario) || 0
+      const qty   = parseFloat(it.cantidad_recibida) || 0
+      return s + (costo * qty)
+    }, 0)
+
+    await audit.registrar(client, {
+      usuario_id:   req.user?.id || null,
+      negocio_id:   orden.negocio_id,
+      accion:       'mercancia_recibida',
+      tabla:        'ordenes_compra',
+      referencia_id: parseInt(id),
+      despues: {
+        orden_id:    parseInt(id),
+        entrada_id:  entrada.id,
+        proveedor:   orden.proveedor_nombre,
+        total_compra: parseFloat(totalCompra.toFixed(2)),
+        productos:   items.map(it => ({
+          producto_id:  it.producto_id,
+          cantidad:     it.cantidad_recibida,
+          costo:        it.costo_unitario || null,
+          lote:         it.lote || null,
+          caducidad:    it.fecha_caducidad || null,
+        })),
+      },
+    })
+
     await client.query('COMMIT')
-    return { entrada_id: entrada.id, success: true }
+    return { entrada_id: entrada.id, total_compra: parseFloat(totalCompra.toFixed(2)), success: true }
   } catch (err) {
     await client.query('ROLLBACK')
     req.log.error(err)

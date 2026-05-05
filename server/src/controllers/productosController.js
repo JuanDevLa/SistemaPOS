@@ -116,7 +116,31 @@ const crear = async (request, reply) => {
     return reply.code(201).send(result.rows[0])
   } catch (err) {
     if (err.code === '23505') {
-      return reply.code(409).send({ error: 'Ya existe un producto con ese código de barras' })
+      // El conflicto puede ser por código de barras o nombre. Buscar el producto inactivo y reactivarlo.
+      try {
+        const conditions = []
+        const params = []
+        if (codigo_barras) { params.push(codigo_barras); conditions.push(`codigo_barras = $${params.length}`) }
+        params.push(nombre.trim()); conditions.push(`LOWER(nombre) = LOWER($${params.length})`)
+        const dup = await pool.query(
+          `SELECT id FROM productos WHERE activo = false AND (${conditions.join(' OR ')}) LIMIT 1`,
+          params
+        )
+        if (dup.rows.length > 0) {
+          const reactivado = await pool.query(
+            `UPDATE productos SET codigo_barras=$1, nombre=$2, descripcion=$3, precio=$4,
+             precio_mayoreo=$5, costo=$6, departamento_id=$7, unidad=$8, aplica_iva=$9,
+             controla_lote=$10, activo=true, actualizado_en=CURRENT_TIMESTAMP
+             WHERE id=$11
+             RETURNING id, codigo_barras, nombre, precio, precio_mayoreo, departamento_id, unidad, aplica_iva, controla_lote, activo`,
+            [codigo_barras || null, nombre, descripcion || null, precio, precio_mayoreo || null,
+             costo || null, departamento_id || null, unidad || 'pieza', aplica_iva || false,
+             controla_lote || false, dup.rows[0].id]
+          )
+          return reply.code(201).send(reactivado.rows[0])
+        }
+      } catch (e2) { console.error(e2) }
+      return reply.code(409).send({ error: 'Ya existe un producto activo con ese nombre o código de barras' })
     }
     console.error(err)
     return reply.code(500).send({ error: 'Error al crear producto' })
