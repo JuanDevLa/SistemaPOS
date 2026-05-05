@@ -286,7 +286,7 @@ const obtener = async (request, reply) => {
   try {
     const venta = await pool.query(
       `SELECT v.id, v.fecha, v.subtotal, v.descuento, v.total, v.metodo_pago,
-              v.efectivo_recibido, v.cambio, v.estado,
+              v.efectivo_recibido, v.monto_tarjeta, v.cambio, v.estado,
               u.nombre AS cajero
        FROM ventas v
        LEFT JOIN usuarios u ON u.id = v.cajero_id
@@ -330,7 +330,7 @@ const listar = async (request, reply) => {
   }
 
   let query = `
-    SELECT v.id, v.fecha, v.total, v.metodo_pago, v.estado, u.nombre AS cajero
+    SELECT v.id, v.fecha, v.total, v.metodo_pago, v.efectivo_recibido, v.monto_tarjeta, v.cambio, v.estado, u.nombre AS cajero
     FROM ventas v
     LEFT JOIN usuarios u ON u.id = v.cajero_id
     WHERE v.negocio_id = $1 AND v.estado = 'completada'`

@@ -404,12 +404,22 @@ const snapshot = async (request, reply) => {
     if (corteIds.length === 0) return reply.send(null)
     const inList = corteIds.map((_, i) => `$${i + 1}`).join(',')
 
-    // Sumas por método (ventas completadas)
+    // Sumas por método (ventas completadas).
+    // Los pagos 'mixto' se desglosan: su porción tarjeta se suma a 'tarjeta'.
+    // La porción efectivo ya está cubierta en ventas_efectivo vía CASE WHEN mixto.
     const ventasMetodo = await pool.query(
-      `SELECT metodo_pago, COUNT(*) AS cantidad, COALESCE(SUM(total),0) AS total
-       FROM ventas
-       WHERE corte_id IN (${inList}) AND estado = 'completada'
-       GROUP BY metodo_pago`,
+      `SELECT metodo_pago, COUNT(*) AS cantidad, COALESCE(SUM(total_norm), 0) AS total
+       FROM (
+         SELECT metodo_pago, total AS total_norm
+         FROM ventas
+         WHERE corte_id IN (${inList}) AND estado = 'completada' AND metodo_pago != 'mixto'
+         UNION ALL
+         SELECT 'tarjeta' AS metodo_pago, COALESCE(monto_tarjeta, 0) AS total_norm
+         FROM ventas
+         WHERE corte_id IN (${inList}) AND estado = 'completada' AND metodo_pago = 'mixto'
+       ) sub
+       GROUP BY metodo_pago
+       ORDER BY total DESC`,
       corteIds
     )
 

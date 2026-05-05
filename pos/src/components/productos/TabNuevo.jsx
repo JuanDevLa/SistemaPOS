@@ -54,7 +54,20 @@ export default function TabNuevo({ usuario }) {
   const [pctDefault, setPctDefault]   = useState(getPct)
   const [editandoPct, setEditandoPct] = useState(false)
   const [pctInput, setPctInput]       = useState('')
+  const [cuenta, setCuenta]           = useState(0)
   const codigoRef = useRef()
+
+  useEffect(() => {
+    if (!mensaje) return
+    if (cuenta <= 0) {
+      setForm(getFormVacio())
+      setMensaje('')
+      codigoRef.current?.focus()
+      return
+    }
+    const t = setTimeout(() => setCuenta(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [mensaje, cuenta])
 
   useEffect(() => {
     api.listarDepartamentos(usuario.negocio_id)
@@ -141,8 +154,7 @@ export default function TabNuevo({ usuario }) {
       }
 
       setMensaje(`Producto "${res.nombre}" guardado correctamente`)
-      setForm(formVacio)
-      codigoRef.current?.focus()
+      setCuenta(3)
     } catch(e) {
       setError(e.message)
     } finally {
@@ -339,14 +351,26 @@ export default function TabNuevo({ usuario }) {
             </div>
           </div>
 
-          {error   && <div style={e.errorMsg}>{error}</div>}
-          {mensaje && <div style={e.okMsg}>{mensaje}</div>}
+          {error && <div style={e.errorMsg}>{error}</div>}
+          {mensaje && (
+            <div style={e.okMsg}>
+              <div style={{ fontWeight: 600 }}>{mensaje}</div>
+              <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 11, color: '#065F46' }}>Limpiando en {cuenta}s...</span>
+                <button
+                  style={{ fontSize: 11, padding: '2px 8px', background: '#059669', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}
+                  onClick={() => { setForm(getFormVacio()); setMensaje(''); setCuenta(0); setError(''); codigoRef.current?.focus() }}>
+                  Crear otro ahora
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Footer fijo */}
       <div style={e.footer}>
-        <button className="pos-btn pos-btn-success" style={e.btnGuardar} onClick={guardar} disabled={guardando}>
+        <button className="pos-btn pos-btn-success" style={e.btnGuardar} onClick={guardar} disabled={guardando || !!mensaje}>
           {guardando ? 'Guardando...' : 'Guardar Producto'}
         </button>
         <button className="pos-btn pos-btn-danger" style={e.btnCancelar} onClick={cancelar}>

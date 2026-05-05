@@ -42,7 +42,13 @@ export default function VentasPage() {
 
   const totalDia = ventas.reduce((s, v) => s + parseFloat(v.total), 0)
   const porMetodo = ventas.reduce((acc, v) => {
-    acc[v.metodo_pago] = (acc[v.metodo_pago] || 0) + parseFloat(v.total)
+    const total = parseFloat(v.total)
+    acc[v.metodo_pago] = acc[v.metodo_pago] || { total: 0, efectivo: 0, tarjeta: 0 }
+    acc[v.metodo_pago].total += total
+    if (v.metodo_pago === 'mixto') {
+      acc[v.metodo_pago].tarjeta  += parseFloat(v.monto_tarjeta || 0)
+      acc[v.metodo_pago].efectivo += total - parseFloat(v.monto_tarjeta || 0)
+    }
     return acc
   }, {})
 
@@ -88,10 +94,16 @@ export default function VentasPage() {
       {/* RESUMEN POR MÉTODO */}
       {ventas.length > 0 && (
         <div style={s.resumenRow}>
-          {Object.entries(porMetodo).map(([metodo, total]) => (
+          {Object.entries(porMetodo).map(([metodo, datos]) => (
             <div key={metodo} style={s.resumenCard}>
               <span style={s.resumenMetodo}>{metodo}</span>
-              <span style={s.resumenTotal}>${total.toFixed(2)}</span>
+              <span style={s.resumenTotal}>${datos.total.toFixed(2)}</span>
+              {metodo === 'mixto' && (
+                <div style={s.mixtoBreakdown}>
+                  <span>Efectivo ${datos.efectivo.toFixed(2)}</span>
+                  <span>Tarjeta ${datos.tarjeta.toFixed(2)}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -218,6 +230,29 @@ export default function VentasPage() {
                       </div>
                     </>
                   )}
+                  {detalle.metodo_pago === 'mixto' && (
+                    <div style={s.mixtoDesglose}>
+                      <div style={s.mixtoTitulo}>Desglose del pago mixto</div>
+                      <div style={s.detalleRow}>
+                        <span style={{ color: '#6B7280' }}>Efectivo</span>
+                        <span style={{ color: '#065F46', fontWeight: 600 }}>
+                          ${(parseFloat(detalle.efectivo_recibido || 0) - parseFloat(detalle.cambio || 0)).toFixed(2)}
+                        </span>
+                      </div>
+                      <div style={s.detalleRow}>
+                        <span style={{ color: '#6B7280' }}>Tarjeta</span>
+                        <span style={{ color: '#1E40AF', fontWeight: 600 }}>
+                          ${parseFloat(detalle.monto_tarjeta || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      {parseFloat(detalle.cambio || 0) > 0 && (
+                        <div style={s.detalleRow}>
+                          <span style={{ color: '#6B7280' }}>Cambio</span>
+                          <span>${parseFloat(detalle.cambio).toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div style={{ ...s.detalleRow, fontWeight: 700, fontSize: 16, borderTop: '2px solid #E5E7EB', paddingTop: 10, marginTop: 4 }}>
                     <span>Total</span>
                     <span style={{ color: '#1E3A5F' }}>${parseFloat(detalle.total).toFixed(2)}</span>
@@ -277,4 +312,7 @@ const s = {
   detalleItems: { flex: 1, overflow: 'auto', marginBottom: 16, border: '1px solid #E5E7EB', borderRadius: 6 },
   detalleFooter: { display: 'flex', flexDirection: 'column', gap: 8 },
   detalleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 },
+  mixtoDesglose: { background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 },
+  mixtoTitulo: { fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  mixtoBreakdown: { display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4, fontSize: 11, color: '#6B7280' },
 }

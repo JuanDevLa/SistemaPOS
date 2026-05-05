@@ -80,6 +80,7 @@ export default function TabModificar({ usuario }) {
       precio_mayoreo:  p.precio_mayoreo ? String(parseFloat(p.precio_mayoreo).toFixed(2)) : '0.00',
       departamento_id: p.departamento_id ? String(p.departamento_id) : '',
       aplica_iva:      p.aplica_iva || false,
+      controla_lote:   p.controla_lote || false,
       usa_inventario:  parseFloat(p.stock_actual) > 0 || parseFloat(p.alerta_minima) > 0,
       hay:             String(p.stock_actual ?? 0),
       minimo:          String(p.alerta_minima ?? 0),
@@ -142,6 +143,7 @@ export default function TabModificar({ usuario }) {
         departamento_id: form.departamento_id ? parseInt(form.departamento_id) : null,
         unidad:          form.unidad,
         aplica_iva:      form.aplica_iva,
+        controla_lote:   form.controla_lote,
       }
       await api.editarProducto(producto.id, data)
 
@@ -285,6 +287,24 @@ export default function TabModificar({ usuario }) {
               <option value="">Sin departamento</option>
               {departamentos.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
             </select>
+          </div>
+
+          <div style={e.fila}>
+            <label style={e.label}></label>
+            <div style={{ display: 'flex', gap: 20 }}>
+              <label style={e.radioLabel}>
+                <input type="checkbox" checked={form.aplica_iva}
+                  onChange={ev => set('aplica_iva', ev.target.checked)} />
+                <span style={{ marginLeft: 4 }}>Aplica IVA (16%)</span>
+              </label>
+              <label style={e.radioLabel}>
+                <input type="checkbox" checked={form.controla_lote}
+                  onChange={ev => set('controla_lote', ev.target.checked)} />
+                <span style={{ marginLeft: 4, fontWeight: form.controla_lote ? 700 : 400, color: form.controla_lote ? '#c05000' : '#1a1a1a' }}>
+                  Es medicamento (lote y caducidad)
+                </span>
+              </label>
+            </div>
           </div>
 
           <div style={e.invSeccion}>
