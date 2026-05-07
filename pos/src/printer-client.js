@@ -43,6 +43,20 @@ export async function openCashDrawer() {
   return window.printerAPI.openDrawer()
 }
 
+export async function reprintLastTicket() {
+  if (!window.printerAPI) {
+    throw new Error('Printer API not available')
+  }
+  return window.printerAPI.reprintLast()
+}
+
+export async function listPrinterDevices() {
+  if (!window.printerAPI) {
+    throw new Error('Printer API not available')
+  }
+  return window.printerAPI.listDevices()
+}
+
 export async function printRecarga(datos) {
   if (!window.printerAPI) {
     throw new Error('Printer API not available')

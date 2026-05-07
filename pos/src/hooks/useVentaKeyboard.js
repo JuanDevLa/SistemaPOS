@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { openCashDrawer } from '../printer-client'
 
 export function useVentaKeyboard({
   tab, setTab,
@@ -57,7 +58,15 @@ export function useVentaKeyboard({
       if (e.key === 'F12') { e.preventDefault(); abrirCobro() }
       if (e.key === 'Insert') { e.preventDefault(); setModalVarios(true) }
 
-      if (e.ctrlKey) {
+      if (e.ctrlKey && e.altKey) {
+        if (e.key === 'd' || e.key === 'D') {
+          e.preventDefault()
+          if (!puede('entrada_efectivo')) { setMensaje('Sin permiso: Abrir cajón'); return }
+          openCashDrawer().catch(() => setMensaje('Error al abrir cajón'))
+        }
+      }
+
+      if (e.ctrlKey && !e.altKey) {
         if (e.key === 'm' || e.key === 'M') { e.preventDefault(); puede('aplicar_mayoreo')    ? handleAccion('mayoreo')    : setMensaje('Sin permiso: Precio mayoreo') }
         if (e.key === 'p' || e.key === 'P') { e.preventDefault(); puede('usar_producto_comun') ? setModalArtComun(true)     : setMensaje('Sin permiso: Producto común') }
         if (e.key === 'c' || e.key === 'C') { e.preventDefault(); setModalCliente(true) }

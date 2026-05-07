@@ -8,7 +8,13 @@
     "start": "node src/index.js",
     "migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
-    "clean": "node src/db/clean.js"
+    "clean": "node src/db/clean.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.mjs --reporter=verbose"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

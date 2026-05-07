@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import { ModalConfigNegocio } from './ModalConfigNegocio'
 import { s } from './estilos'
+
+const sBtnSec = { padding: '6px 12px', background: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 5, fontSize: 12, cursor: 'pointer' }
 
 export function ModalLectorCodigos({ onClose }) {
   return (
@@ -34,17 +37,80 @@ export function ModalLectorCodigos({ onClose }) {
 }
 
 export function ModalImpresora({ onClose }) {
+  const [dispositivos, setDispositivos] = useState([])
+  const [buscando, setBuscando] = useState(false)
+
+  const detectar = async (set, nid) => {
+    if (!window.printerAPI) return
+    setBuscando(true)
+    try {
+      const res = await window.printerAPI.listDevices()
+      setDispositivos(res.devices || [])
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  const seleccionarDispositivo = (vid, pid, set, nid) => {
+    set(nid, 'printer_vid', vid)
+    set(nid, 'printer_pid', pid)
+  }
+
   return (
     <ModalConfigNegocio titulo="Impresora de tickets"
-      desc="Nombre de la impresora en Windows (Dispositivos e impresoras) y opciones de impresión."
-      ancho={560}
-      getVals={cfg => ({ impresora_nombre: cfg.impresora_nombre ?? '', impresora_corte_auto: cfg.impresora_corte_auto ?? true, impresora_copias: cfg.impresora_copias ?? 1 })}
+      desc="Identifica la impresora por VID/PID USB. Usa 'Detectar' para encontrar el dispositivo correcto."
+      ancho={580}
+      getVals={cfg => ({
+        impresora_nombre:    cfg.impresora_nombre    ?? '',
+        impresora_corte_auto: cfg.impresora_corte_auto ?? true,
+        impresora_copias:    cfg.impresora_copias    ?? 1,
+        printer_vid:         cfg.printer_vid         ?? null,
+        printer_pid:         cfg.printer_pid         ?? null,
+        printer_encoding:    cfg.printer_encoding    ?? 'CP850',
+      })}
       renderCampos={(nid, v, set) => (<>
-        <div style={{ flex: 1 }}>
-          <label style={s.fieldLabel}>Nombre de impresora</label>
-          <input style={s.fieldInput} value={v.impresora_nombre ?? ''} maxLength={100}
-            placeholder="Blackpos WW-5888T"
-            onChange={e => set(nid, 'impresora_nombre', e.target.value)} />
+        <div style={{ width: '100%' }}>
+          <label style={s.fieldLabel}>Identificador USB (VID / PID)</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input style={{ ...s.fieldInput, width: 90, fontFamily: 'monospace' }}
+              value={v.printer_vid ? '0x' + v.printer_vid.toString(16).toUpperCase().padStart(4, '0') : ''}
+              placeholder="VID"
+              onChange={e => {
+                const n = parseInt(e.target.value, 16)
+                set(nid, 'printer_vid', isNaN(n) ? null : n)
+              }} />
+            <input style={{ ...s.fieldInput, width: 90, fontFamily: 'monospace' }}
+              value={v.printer_pid ? '0x' + v.printer_pid.toString(16).toUpperCase().padStart(4, '0') : ''}
+              placeholder="PID"
+              onChange={e => {
+                const n = parseInt(e.target.value, 16)
+                set(nid, 'printer_pid', isNaN(n) ? null : n)
+              }} />
+            <button style={sBtnSec} onClick={() => detectar(set, nid)} disabled={buscando}>
+              {buscando ? 'Buscando...' : 'Detectar dispositivos'}
+            </button>
+          </div>
+          {dispositivos.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {dispositivos.map((d, i) => (
+                <button key={i} style={{ ...sBtnSec, textAlign: 'left', fontFamily: 'monospace', fontSize: 12 }}
+                  onClick={() => seleccionarDispositivo(d.vid, d.pid, set, nid)}>
+                  {d.vidHex}:{d.pidHex}
+                  {d.usbClass === 0x07 ? ' ★ Printer class' : ''}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <label style={s.fieldLabel}>Encoding (caracteres)</label>
+          <select style={{ ...s.fieldInput, width: 110 }}
+            value={v.printer_encoding ?? 'CP850'}
+            onChange={e => set(nid, 'printer_encoding', e.target.value)}>
+            <option value="CP850">CP850 (recomendado — ñ á é)</option>
+            <option value="CP437">CP437 (USA)</option>
+            <option value="UTF-8">UTF-8</option>
+          </select>
         </div>
         <div>
           <label style={s.fieldLabel}>Copias</label>

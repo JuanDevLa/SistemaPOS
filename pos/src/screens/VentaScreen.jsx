@@ -29,6 +29,7 @@ import ModalAsignarCliente  from '../components/venta/ModalAsignarCliente'
 import ModalConfirmacion    from '../components/venta/ModalConfirmacion'
 import ModalTicketPendiente from '../components/venta/ModalTicketPendiente'
 import ModalFiado           from '../components/venta/ModalFiado'
+import { ModalErrorImpresora } from '../components/venta/ModalErrorImpresora'
 import ModalDevoluciones    from '../components/venta/ModalDevoluciones'
 import ModalCambiarTicket   from '../components/venta/ModalCambiarTicket'
 import ModalDescuento       from '../components/venta/ModalDescuento'
@@ -176,7 +177,7 @@ export default function VentaScreen({ usuario, corteInicial, onLogout, onRefresc
   // ── Derivados ───────────────────────────────────────────────
   const { carrito, total, subtotal, descuentoGlobal, descuentoMonto } = cart
 
-  const cobro = useCobro({ total, carrito, descuentoMonto, cart, usuario, corteActivo, puede, setTicket, setMensaje, setModalFiado })
+  const cobro = useCobro({ total, carrito, descuentoMonto, cart, usuario, corteActivo, puede, setTicket, setMensaje, setModalFiado, clienteSeleccionado })
   const mp    = useMercadoPagoPoint()
   const {
     metodoPago, setMetodoPago, pagoCon, setPagoCon, cambio,
@@ -390,6 +391,14 @@ export default function VentaScreen({ usuario, corteInicial, onLogout, onRefresc
           onGuardarYNuevo={handleGuardarTicketPendiente}
           onLimpiarSinGuardar={handleLimpiarSinGuardar}
           onCancelar={() => setModalTicketPendiente(false)}
+        />
+      )}
+
+      {cobro.errorImpresora && (
+        <ModalErrorImpresora
+          folio={cobro.errorImpresora.folio}
+          total={cobro.errorImpresora.total}
+          onContinuar={() => cobro.setErrorImpresora(null)}
         />
       )}
 

@@ -2,17 +2,34 @@ import { useState, useEffect } from 'react'
 import { api, setOnUnauthorized, setOnPermisoDenegado, setToken } from './api'
 import LoginScreen from './screens/LoginScreen'
 import VentaScreen from './screens/VentaScreen'
+import ActivacionScreen from './screens/ActivacionScreen'
+import LicenciaVencidaScreen from './screens/LicenciaVencidaScreen'
 import ModalAperturaCaja from './components/ModalAperturaCaja'
 import ModalTurnoAbierto from './components/ModalTurnoAbierto'
 import ModalAutorizacionAdmin from './components/venta/ModalAutorizacionAdmin'
+import ModalSalidaKiosk from './components/venta/ModalSalidaKiosk'
+import UpdateNotification from './components/UpdateNotification'
 
 export default function App() {
+  const [licencia, setLicencia] = useState(null) // null = verificando
+
+  useEffect(() => {
+    const check = async () => {
+      // En navegador puro (sin Electron), saltar verificación
+      if (!window.licenciaAPI) { setLicencia({ ok: true, estado: 'dev' }); return }
+      const resultado = await window.licenciaAPI.verificar()
+      setLicencia(resultado)
+    }
+    check()
+  }, [])
+
   const [usuario, setUsuario] = useState(null)
   const [checkingTurno, setCheckingTurno] = useState(false)
   const [turnoExistente, setTurnoExistente] = useState(null)
   const [aperturaPendiente, setAperturaPendiente] = useState(false)
   const [corteInicial, setCorteInicial] = useState(null)
   const [autorizacionPendiente, setAutorizacionPendiente] = useState(null) // { permiso, resolve }
+  const [mostrarSalidaKiosk, setMostrarSalidaKiosk] = useState(false)
 
   // Inicializar BD SQLite y sincronizar
   useEffect(() => {
@@ -129,9 +146,31 @@ export default function App() {
     }))
   }, [])
 
+  // Kiosk: Ctrl+Shift+Q desde main.js solicita PIN de salida
+  useEffect(() => {
+    if (!window.kioskAPI) return
+    window.kioskAPI.onPedirSalida(() => setMostrarSalidaKiosk(true))
+  }, [])
+
   const cerrarAutorizacion = (token) => {
     autorizacionPendiente?.resolve(token || null)
     setAutorizacionPendiente(null)
+  }
+
+  // ── Licencia ──────────────────────────────────────────────────────────────
+  if (!licencia) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f2540', fontFamily: 'Segoe UI, system-ui, sans-serif', color: '#9CA3AF', fontSize: 14 }}>
+        Verificando licencia...
+      </div>
+    )
+  }
+
+  if (!licencia.ok) {
+    if (licencia.estado === 'sin_licencia') {
+      return <ActivacionScreen onActivar={setLicencia} />
+    }
+    return <LicenciaVencidaScreen licencia={licencia} onReintentar={() => setLicencia(null)} />
   }
 
   if (!usuario) {
@@ -163,6 +202,11 @@ export default function App() {
 
   return (
     <>
+      {licencia.advertencia && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: licencia.estado === 'gracia_offline' ? '#7f1d1d' : '#92400e', color: '#fff', padding: '6px 16px', fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
+          ⚠️ {licencia.advertencia}
+        </div>
+      )}
       <VentaScreen usuario={usuario.usuario} corteInicial={corteInicial} onLogout={handleLogout} onRefrescarUsuario={refrescarUsuario} />
       {autorizacionPendiente && (
         <ModalAutorizacionAdmin
@@ -172,6 +216,10 @@ export default function App() {
           onCancelar={() => cerrarAutorizacion(null)}
         />
       )}
+      {mostrarSalidaKiosk && (
+        <ModalSalidaKiosk onCancelar={() => setMostrarSalidaKiosk(false)} />
+      )}
+      <UpdateNotification />
     </>
   )
 }

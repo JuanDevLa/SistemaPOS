@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { api } from '../api'
 import { printTicket, openCashDrawer } from '../printer-client'
 
-export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteActivo, puede, setTicket, setMensaje, setModalFiado }) {
+export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteActivo, puede, setTicket, setMensaje, setModalFiado, clienteSeleccionado }) {
 
   const [metodoPago, setMetodoPago]                           = useState(null)
   const [pagoCon, setPagoCon]                                 = useState('')
@@ -16,6 +16,7 @@ export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteA
   const [nombreTransferencia, setNombreTransferencia]         = useState('')
   const [montoPagadoFiado, setMontoPagadoFiado]               = useState('')
   const [nombreClienteFiado, setNombreClienteFiado]           = useState('')
+  const [errorImpresora, setErrorImpresora]                   = useState(null)
 
   const cambio = pagoCon ? parseFloat(pagoCon) - total : 0
 
@@ -60,6 +61,8 @@ export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteA
     const pagadoCredito = metodoAUsar === 'credito' ? parseFloat(montoPagadoFiado || 0) : 0
     let res
     try {
+      const descGlobal = cart.descuentoGlobal
+      const clienteId = clienteCredito?.id || clienteSeleccionado?.id || null
       res = await api.registrarVenta({
         negocio_id: usuario.negocio_id,
         corte_id: corteActivo?.id || null,
@@ -78,8 +81,15 @@ export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteA
         nombre_tarjeta: metodoAUsar === 'tarjeta'        ? nombreTarjeta || undefined        : undefined,
         nombre_titular: metodoAUsar === 'transferencia'  ? nombreTransferencia || undefined  : undefined,
         nombre_cliente: metodoAUsar === 'credito'        ? (clienteCredito?.nombre || nombreClienteFiado) : null,
+        cliente_id:     clienteId,
         descuento: descuentoMonto > 0 ? descuentoMonto : undefined,
-        items: carrito.map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_unitario: i.precio_venta }))
+        descuento_global: descGlobal?.valor > 0 ? descGlobal : undefined,
+        items: carrito.map(i => ({
+          producto_id:    i.producto_id,
+          cantidad:       i.cantidad,
+          precio_unitario: i.precio_venta,
+          descuento_item: 0,
+        }))
       })
     } catch(e) {
       setMensaje(e.message); return
@@ -106,21 +116,27 @@ export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteA
     setBusquedaCredito(''); setResultadosCredito([]); setModalFiado(false)
 
     if (window.printerAPI) {
+      setMensaje('Imprimiendo ticket...')
+      const datosTicket = {
+        venta_id: res.venta_id, folio: res.folio,
+        negocio: usuario.negocio_nombre, ticket_nombre: usuario.ticket_nombre,
+        ticket_slogan: usuario.ticket_slogan, ticket_telefono: usuario.ticket_telefono,
+        ticket_pie: usuario.ticket_pie,
+        items: carrito.map(i => ({ nombre: i.nombre, cantidad: i.cantidad, precio_unitario: i.precio_venta })),
+        subtotal: res.subtotal, descuento: res.descuento, total: res.total, iva_total: res.iva_total,
+        metodo_pago: metodoAUsar, efectivo_recibido: res.efectivo_recibido, cambio: res.cambio
+      }
       try {
-        setMensaje('Imprimiendo ticket...')
-        const pr = await printTicket({
-          venta_id: res.venta_id, folio: res.folio,
-          negocio: usuario.negocio_nombre, ticket_nombre: usuario.ticket_nombre,
-          ticket_slogan: usuario.ticket_slogan, ticket_telefono: usuario.ticket_telefono,
-          ticket_pie: usuario.ticket_pie,
-          items: carrito.map(i => ({ nombre: i.nombre, cantidad: i.cantidad, precio_unitario: i.precio_venta })),
-          subtotal: res.subtotal, descuento: res.descuento, total: res.total, iva_total: res.iva_total,
-          metodo_pago: metodoAUsar, efectivo_recibido: res.efectivo_recibido, cambio: res.cambio
-        })
-        const errMsg = /null|undefined|transfer/i.test(pr.error || '') ? 'Impresora no conectada' : pr.error
-        setMensaje(pr.success ? '✓ Ticket impreso' : `⚠ ${errMsg}`)
-        if (metodoAUsar === 'efectivo') { try { await openCashDrawer() } catch (_) {} }
-      } catch { setMensaje(`Ticket: ${res.venta_id}`) }
+        const pr = await printTicket(datosTicket)
+        if (pr.success) {
+          setMensaje('Ticket impreso')
+          if (metodoAUsar === 'efectivo') { try { await openCashDrawer() } catch (_) {} }
+        } else {
+          setErrorImpresora({ folio: res.folio, total: res.total })
+        }
+      } catch {
+        setErrorImpresora({ folio: res.folio, total: res.total })
+      }
     } else {
       setMensaje(`Ticket: ${res.venta_id}`)
     }
@@ -140,5 +156,6 @@ export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteA
     montoPagadoFiado, setMontoPagadoFiado,
     nombreClienteFiado, setNombreClienteFiado,
     cobrar, abrirCobro,
+    errorImpresora, setErrorImpresora,
   }
 }

@@ -1,11 +1,17 @@
-const { app, BrowserWindow, ipcMain, safeStorage } = require('electron')
+const { app, BrowserWindow, ipcMain, safeStorage, globalShortcut } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const Database = require('better-sqlite3')
 const PrinterService = require('./printer-service')
+const licenciaService = require('./licencia-service')
+const { autoUpdater } = require('electron-updater')
 
-const isDev = process.env.NODE_ENV !== 'production'
+// app.isPackaged es true SOLO cuando corre el .exe instalado — más confiable que NODE_ENV
+const isDev = !app.isPackaged
 const printer = new PrinterService()
+
+// Flag para permitir cerrar la ventana cuando el PIN de kiosk fue validado
+let exitAutorizado = false
 
 // SQLite Database
 let db = null
@@ -161,6 +167,32 @@ const MIGRATIONS = [
       addColumnIfMissing(database, 'productos_cache', 'stock_cache', 'REAL DEFAULT 0')
     },
   },
+  {
+    version: 4,
+    name: 'cajeros_cache_rol',
+    up: (database) => {
+      addColumnIfMissing(database, 'cajeros_cache', 'rol', "TEXT DEFAULT 'cajero'")
+    },
+  },
+  {
+    version: 5,
+    name: 'licencia_cache',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS licencia_cache (
+          id                    INTEGER PRIMARY KEY,
+          clave                 TEXT NOT NULL,
+          hardware_id           TEXT NOT NULL,
+          plan_tipo             TEXT DEFAULT 'basico',
+          max_maquinas          INTEGER DEFAULT 1,
+          dias_restantes        INTEGER,
+          estado                TEXT DEFAULT 'activa',
+          validado_en           TEXT NOT NULL,
+          expira_segun_servidor TEXT
+        )
+      `)
+    },
+  },
 ]
 
 const runMigrations = (database) => {
@@ -234,6 +266,8 @@ const createWindow = () => {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    // Kiosk: pantalla completa sin bordes, F11/Escape bloqueados por Electron
+    kiosk: !isDev,
     fullscreen: !isDev,
     frame: isDev,
     autoHideMenuBar: true,
@@ -244,18 +278,79 @@ const createWindow = () => {
     }
   })
 
+  // En producción: bloquear el cierre de ventana salvo que venga de kiosk:salir
+  if (!isDev) {
+    win.on('close', (e) => {
+      if (!exitAutorizado) {
+        e.preventDefault()
+      }
+    })
+  }
+
   if (isDev) {
     win.loadURL('http://localhost:5173')
     win.webContents.openDevTools()
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'))
   }
+
+  // Ctrl+Shift+Q: solicitar PIN de salida al renderer
+  globalShortcut.register('CommandOrControl+Shift+Q', () => {
+    win.webContents.send('kiosk:pedir-salida')
+  })
+
+  // En producción deshabilitar shortcuts de devtools y recarga
+  if (!isDev) {
+    globalShortcut.register('CommandOrControl+R', () => {})
+    globalShortcut.register('F5', () => {})
+    globalShortcut.register('F12', () => {})
+  }
+
+  return win
 }
 
 // IPC Handlers para impresora térmica
+
+let lastTicketData = null
+
+// Lee VID/PID y encoding de config.json y aplica al printer service
+const applyPrinterConfig = () => {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+      if (cfg.printer_encoding) printer.encoding = cfg.printer_encoding
+    }
+  } catch (_) {}
+}
+
+const printerAutoConnect = async () => {
+  if (printer.device) return
+  applyPrinterConfig()
+  try {
+    const cfg = fs.existsSync(CONFIG_PATH)
+      ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+      : {}
+    await printer.connect(cfg.printer_vid, cfg.printer_pid)
+  } catch (err) {
+    throw err
+  }
+}
+
+ipcMain.handle('printer:list-devices', () => {
+  try {
+    return { success: true, devices: printer.listDevices() }
+  } catch (err) {
+    return { success: false, error: err.message, devices: [] }
+  }
+})
+
 ipcMain.handle('printer:connect', async () => {
   try {
-    await printer.connect()
+    applyPrinterConfig()
+    const cfg = fs.existsSync(CONFIG_PATH)
+      ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+      : {}
+    await printer.connect(cfg.printer_vid, cfg.printer_pid)
     return { success: true, message: 'Impresora conectada' }
   } catch (err) {
     return { success: false, error: err.message }
@@ -273,10 +368,8 @@ ipcMain.handle('printer:disconnect', async () => {
 
 ipcMain.handle('printer:print-ticket', async (event, venta) => {
   try {
-    // Auto-connect si no está conectado
-    if (!printer.device) {
-      await printer.connect()
-    }
+    await printerAutoConnect()
+    lastTicketData = venta
     await printer.printTicket(venta)
     return { success: true, message: 'Ticket impreso' }
   } catch (err) {
@@ -284,11 +377,20 @@ ipcMain.handle('printer:print-ticket', async (event, venta) => {
   }
 })
 
+ipcMain.handle('printer:reprint-last', async () => {
+  try {
+    if (!lastTicketData) return { success: false, error: 'Sin ticket previo' }
+    await printerAutoConnect()
+    await printer.printTicket(lastTicketData)
+    return { success: true, message: 'Ticket reimpreso' }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
 ipcMain.handle('printer:print-corte', async (event, corte) => {
   try {
-    if (!printer.device) {
-      await printer.connect()
-    }
+    await printerAutoConnect()
     await printer.printCorte(corte)
     return { success: true, message: 'Corte impreso' }
   } catch (err) {
@@ -298,7 +400,7 @@ ipcMain.handle('printer:print-corte', async (event, corte) => {
 
 ipcMain.handle('printer:print-corte-snapshot', async (event, payload) => {
   try {
-    if (!printer.device) await printer.connect()
+    await printerAutoConnect()
     await printer.printCorteSnapshot(payload.snapshot, payload.opciones || {})
     return { success: true }
   } catch (err) {
@@ -308,10 +410,11 @@ ipcMain.handle('printer:print-corte-snapshot', async (event, payload) => {
 
 ipcMain.handle('printer:open-drawer', async () => {
   try {
-    if (!printer.device) {
-      await printer.connect()
-    }
-    await printer.openDrawer()
+    await printerAutoConnect()
+    const cfg = fs.existsSync(CONFIG_PATH)
+      ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+      : {}
+    await printer.openDrawer(cfg.cajon_pin ?? 0)
     return { success: true, message: 'Cajón abierto' }
   } catch (err) {
     return { success: false, error: err.message }
@@ -403,15 +506,14 @@ ipcMain.handle('db:buscar-producto', async (event, q, negocioId) => {
   }
 })
 
-ipcMain.handle('db:cache-cajero', async (event, nombre, pin, negocioId) => {
+ipcMain.handle('db:cache-cajero', async (event, nombre, pin, negocioId, rol) => {
   try {
-    // UPSERT: si el cajero ya existe en este negocio, actualiza su PIN; si no, lo agrega.
-    // Permite que múltiples cajeros del mismo negocio puedan loguearse offline.
+    // UPSERT: actualiza PIN y rol del cajero en la caché local.
     db.prepare(`
-      INSERT INTO cajeros_cache (nombre, pin, negocio_id)
-      VALUES (?, ?, ?)
-      ON CONFLICT(nombre, negocio_id) DO UPDATE SET pin = excluded.pin
-    `).run(nombre, pin, negocioId)
+      INSERT INTO cajeros_cache (nombre, pin, negocio_id, rol)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(nombre, negocio_id) DO UPDATE SET pin = excluded.pin, rol = excluded.rol
+    `).run(nombre, pin, negocioId, rol || 'cajero')
     return { success: true }
   } catch (err) {
     return { success: false, error: err.message }
@@ -589,12 +691,117 @@ ipcMain.handle('token:load', async () => {
   }
 })
 
+// ===== Kiosk: salida con PIN admin =====
+
+ipcMain.handle('kiosk:verificar-pin', async (event, pin) => {
+  try {
+    // La caché guarda el PIN en texto plano (igual que el login offline).
+    // Se compara directamente contra todos los cajeros con rol 'admin'.
+    const admin = db.prepare(
+      `SELECT id FROM cajeros_cache WHERE rol = 'admin' AND pin = ?`
+    ).get(String(pin))
+    if (admin) return { ok: true }
+    return { ok: false, error: 'PIN incorrecto' }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+})
+
+ipcMain.handle('kiosk:salir', async () => {
+  exitAutorizado = true
+  app.quit()
+})
+
+// ===== Config: leer y guardar config.json (URL backend) =====
+
+ipcMain.handle('config:leer', async () => {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+    }
+    return {}
+  } catch {
+    return {}
+  }
+})
+
+ipcMain.handle('config:guardar', async (event, data) => {
+  try {
+    const actual = fs.existsSync(CONFIG_PATH)
+      ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+      : {}
+    const nuevo = { ...actual, ...data }
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(nuevo, null, 2), 'utf8')
+    // Limpiar caché para que la próxima llamada use la URL nueva
+    _apiUrlCache = null
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+})
+
+// ===== Auto-updater (servidor propio en DigitalOcean) =====
+
+autoUpdater.autoDownload    = true   // descarga en fondo apenas detecta versión nueva
+autoUpdater.autoInstallOnAppQuit = false  // NO instalar automático al cerrar — el cajero decide
+
+autoUpdater.on('update-available', (info) => {
+  BrowserWindow.getAllWindows()[0]?.webContents.send('updater:disponible', info.version)
+})
+
+autoUpdater.on('update-downloaded', (info) => {
+  BrowserWindow.getAllWindows()[0]?.webContents.send('updater:listo', info.version)
+})
+
+autoUpdater.on('error', (err) => {
+  console.error('[autoUpdater]', err.message)
+})
+
+ipcMain.handle('updater:verificar', async () => {
+  try   { await autoUpdater.checkForUpdates(); return { ok: true } }
+  catch (err) { return { ok: false, error: err.message } }
+})
+
+ipcMain.handle('updater:instalar', () => {
+  autoUpdater.quitAndInstall(false, true) // isSilent=false, isForceRunAfter=true
+})
+
+// ===== Licencia =====
+
+ipcMain.handle('licencia:verificar', async () => {
+  return await licenciaService.verificar()
+})
+
+ipcMain.handle('licencia:activar', async (event, clave) => {
+  return await licenciaService.activar(clave)
+})
+
+ipcMain.handle('licencia:hardware-id', () => {
+  return licenciaService.getHardwareId()
+})
+
 app.whenReady().then(() => {
   initDatabase()
+  licenciaService.init(db, getApiUrl, CONFIG_PATH)
   runDailyBackup()
   createWindow()
+
+  if (!isDev) {
+    try {
+      // Derivar URL de updates del mismo host que el API (Nginx puerto 80, ruta /updates).
+      // Así si cambias de servidor, solo actualizas api_url en config.json — no hay que recompilar.
+      const apiUrl  = getApiUrl()                      // ej. http://206.81.5.94:3001
+      const { protocol, hostname } = new URL(apiUrl)
+      const updateUrl = `${protocol}//${hostname}/updates`
+      autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl })
+    } catch (err) {
+      console.error('[updater] No se pudo leer URL desde config:', err.message)
+    }
+    autoUpdater.checkForUpdates().catch(err => console.error('[updater]', err.message))
+  }
 })
 
 app.on('window-all-closed', () => {
+  globalShortcut.unregisterAll()
   app.quit()
 })

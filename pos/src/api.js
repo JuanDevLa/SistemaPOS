@@ -114,8 +114,7 @@ export const api = {
     if (online) {
       const res = await request('POST', '/auth/cajero', { usuario, pin, negocio_id })
       if (res.token) {
-        // Guardar en cache
-        await window.dbAPI.cacheCajero(usuario, pin, negocio_id)
+        await window.dbAPI.cacheCajero(usuario, pin, negocio_id, res.usuario?.rol || 'cajero')
       }
       return res
     } else {

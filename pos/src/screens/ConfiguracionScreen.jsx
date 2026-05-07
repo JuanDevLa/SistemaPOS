@@ -6,7 +6,7 @@ import {
   Users, Store, Database, FileText, Hash, Receipt, CreditCard,
   DollarSign, Package, Printer, ScanLine, Wallet, Terminal,
   Smartphone, Lightbulb, Truck, HardDrive, RefreshCw, X,
-  Scissors, Lock, RotateCcw, BarChart2, Shield
+  Scissors, Lock, RotateCcw, BarChart2, Shield, Server
 } from 'lucide-react'
 import {
   ModalImpuestos, ModalMoneda, ModalFormasPago,
@@ -62,9 +62,10 @@ export default function ConfiguracionScreen({ usuario }) {
         <Tarjeta Icono={Truck}      label="Compras"           onClick={() => setModal('compras')} esAdmin={esAdmin} />
       </Seccion>
 
-      <Seccion titulo="Mantenimiento">
-        <Tarjeta Icono={HardDrive} label="Respaldo"       proximamente />
-        <Tarjeta Icono={RefreshCw} label="Actualizaciones" proximamente />
+      <Seccion titulo="Sistema">
+        {esAdmin && <Tarjeta Icono={Server}    label="Servidor / URL"   onClick={() => setModal('servidor')} esAdmin={esAdmin} />}
+        <Tarjeta Icono={RefreshCw} label="Actualizaciones" onClick={() => setModal('actualizaciones')} />
+        <Tarjeta Icono={HardDrive} label="Respaldo"        proximamente />
       </Seccion>
 
       {modal === 'folios'       && <ModalFolios       onClose={() => setModal(null)} />}
@@ -83,6 +84,8 @@ export default function ConfiguracionScreen({ usuario }) {
       {modal === 'terminalTPV'  && <ModalTerminalTPV  onClose={() => setModal(null)} />}
       {modal === 'recargas'     && <ModalRecargas     onClose={() => setModal(null)} />}
       {modal === 'compras'      && <ModalCompras      onClose={() => setModal(null)} />}
+      {modal === 'servidor'     && <ModalServidor     onClose={() => setModal(null)} />}
+      {modal === 'actualizaciones' && <ModalActualizaciones onClose={() => setModal(null)} />}
     </div>
   )
 }
@@ -326,6 +329,90 @@ function ModalCortes({ onClose }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal Servidor (URL del backend) ────────────────────────────────────────
+
+function ModalServidor({ onClose }) {
+  const [url, setUrl]         = useState('')
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [msg, setMsg]         = useState('')
+
+  useEffect(() => {
+    if (!window.configAPI) { setCargando(false); return }
+    window.configAPI.leer().then(cfg => {
+      setUrl(cfg?.api_url || '')
+      setCargando(false)
+    })
+  }, [])
+
+  const guardar = async () => {
+    if (!url.trim()) return
+    setGuardando(true); setMsg('')
+    try {
+      const res = await window.configAPI.guardar({ api_url: url.trim() })
+      setMsg(res.ok ? 'Guardado. Reinicia la app para aplicar.' : (res.error || 'Error'))
+    } catch { setMsg('Error al guardar') }
+    setGuardando(false)
+  }
+
+  return (
+    <div style={sm.overlay}>
+      <div style={{ ...sm.modalCard, width: 480 }}>
+        <div style={sm.modalHeader}>
+          <h3 style={sm.modalTitle}>Servidor / URL del backend</h3>
+          <button style={sm.btnCerrar} onClick={onClose}><X size={18} /></button>
+        </div>
+        <p style={sm.desc}>URL del servidor backend al que se conecta el POS. Ejemplo: <code>https://api.tudominio.com</code></p>
+        {cargando ? <p style={sm.loading}>Cargando...</p> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={sm.fieldLabel}>URL del backend</label>
+              <input
+                style={sm.fieldInput} value={url}
+                onChange={e => { setUrl(e.target.value); setMsg('') }}
+                placeholder="https://api.tudominio.com"
+                onKeyDown={e => e.key === 'Enter' && guardar()}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button style={sm.btnGuardar} onClick={guardar} disabled={guardando || !url.trim()}>
+                {guardando ? 'Guardando...' : 'Guardar'}
+              </button>
+              {msg && <span style={{ fontSize: 12, color: msg.startsWith('Guardado') ? '#065F46' : '#DC2626' }}>{msg}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal Actualizaciones ────────────────────────────────────────────────────
+
+function ModalActualizaciones({ onClose }) {
+  return (
+    <div style={sm.overlay}>
+      <div style={{ ...sm.modalCard, width: 420 }}>
+        <div style={sm.modalHeader}>
+          <h3 style={sm.modalTitle}>Actualizaciones</h3>
+          <button style={sm.btnCerrar} onClick={onClose}><X size={18} /></button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, color: '#374151', fontSize: 13 }}>
+          <p style={{ margin: 0 }}>
+            Las actualizaciones automáticas se activarán en la próxima versión estable.
+          </p>
+          <p style={{ margin: 0, color: '#6B7280' }}>
+            Para actualizar manualmente: descarga el nuevo instalador desde el repositorio y ejecútalo sobre la instalación existente.
+          </p>
+          <div style={{ background: '#F3F4F6', borderRadius: 6, padding: '10px 14px', fontSize: 12, fontFamily: 'monospace', color: '#374151' }}>
+            Versión actual: {window.__PDV_VERSION__ || '1.0.0'}
+          </div>
+        </div>
       </div>
     </div>
   )

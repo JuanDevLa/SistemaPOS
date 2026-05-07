@@ -567,6 +567,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_ventas_negocio_folio
 -- Fase 1 integridad: índice explícito en venta_items(venta_id) — FK en PG no garantiza índice
 CREATE INDEX IF NOT EXISTS idx_venta_items_venta ON venta_items(venta_id);
 
+-- Licenciamiento: una fila por cliente/licencia
+CREATE TABLE IF NOT EXISTS licencias (
+  id               SERIAL PRIMARY KEY,
+  clave            VARCHAR(20) NOT NULL UNIQUE,
+  cliente_nombre   VARCHAR(200),
+  email            VARCHAR(100),
+  plan             VARCHAR(20) NOT NULL DEFAULT 'basico',
+  max_maquinas     INT NOT NULL DEFAULT 1,
+  fecha_inicio     DATE DEFAULT CURRENT_DATE,
+  fecha_expiracion DATE,
+  activa           BOOLEAN DEFAULT true,
+  notas            TEXT,
+  creado_en        TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Licenciamiento: una fila por PC registrada
+CREATE TABLE IF NOT EXISTS licencia_maquinas (
+  id                  SERIAL PRIMARY KEY,
+  licencia_id         INT NOT NULL REFERENCES licencias(id) ON DELETE CASCADE,
+  hardware_id         VARCHAR(64) NOT NULL,
+  hostname            VARCHAR(100),
+  primera_activacion  TIMESTAMPTZ DEFAULT NOW(),
+  ultima_validacion   TIMESTAMPTZ DEFAULT NOW(),
+  activa              BOOLEAN DEFAULT true,
+  UNIQUE(licencia_id, hardware_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_licencias_clave ON licencias(clave);
+CREATE INDEX IF NOT EXISTS idx_licencia_maquinas_lic ON licencia_maquinas(licencia_id);
+
 -- Trigger: mantener actualizado_en actualizado en UPDATE (productos, inventario, clientes, config_recargas)
 CREATE OR REPLACE FUNCTION fn_actualizar_timestamp()
 RETURNS TRIGGER AS $$

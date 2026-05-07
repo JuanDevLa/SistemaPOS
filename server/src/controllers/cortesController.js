@@ -320,20 +320,22 @@ const corteDia = async (request, reply) => {
   }
 }
 
-// Turno abierto del negocio del usuario autenticado
+// Turno abierto del cajero autenticado (admin ve cualquiera del negocio)
 const turnoAbierto = async (request, reply) => {
-  const { negocio_id } = request.user
+  const { negocio_id, id: cajero_id, rol } = request.user
 
   try {
+    const esAdmin = rol === 'admin'
     const result = await pool.query(
       `SELECT c.id, c.apertura, c.efectivo_inicial, c.estado,
               c.cajero_id, u.nombre AS cajero
        FROM cortes_caja c
        LEFT JOIN usuarios u ON u.id = c.cajero_id
        WHERE c.negocio_id = $1 AND c.estado = 'abierto'
+         ${esAdmin ? '' : 'AND c.cajero_id = $2'}
        ORDER BY c.apertura DESC
        LIMIT 1`,
-      [negocio_id]
+      esAdmin ? [negocio_id] : [negocio_id, cajero_id]
     )
     return reply.send(result.rows[0] || null)
   } catch (err) {

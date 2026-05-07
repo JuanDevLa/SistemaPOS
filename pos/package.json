@@ -6,10 +6,46 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"electron .\"",
     "build": "vite build && electron-builder",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "build": {
+    "appId": "com.pdv.app",
+    "productName": "PDV Punto de Venta",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist-installer"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/usb/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/node-gyp-build/**/*"
+    ],
+    "publish": {
+      "provider": "generic",
+      "url": "http://206.81.5.94/updates"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PDV Punto de Venta"
+    }
   },
   "dependencies": {
     "better-sqlite3": "^11.6.0",
+    "electron-updater": "^6.3.9",
     "lucide-react": "^1.11.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -17,10 +53,14 @@
     "usb": "^2.17.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.6",
+    "@testing-library/react": "^16.0.0",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.2.2",
     "electron": "^31.3.1",
     "electron-builder": "^24.13.3",
-    "vite": "^5.4.2"
+    "jsdom": "^24.0.0",
+    "vite": "^5.4.2",
+    "vitest": "^1.6.0"
   }
 }
