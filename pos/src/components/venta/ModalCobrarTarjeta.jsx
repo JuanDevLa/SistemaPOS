@@ -29,6 +29,23 @@ export default function ModalCobrarTarjeta({ cobro, total, mensaje, negocio_id, 
     mp.iniciarPago(total, ref).catch(() => {})
   }, []) // eslint-disable-line
 
+  // Auto-finalizar venta al aprobar. Ref guard CRÍTICO para no registrar la venta dos veces
+  // (StrictMode en dev re-ejecuta efectos; sin guard se duplicaría el cobro).
+  // Pequeño delay para que el cajero alcance a ver "¡Pago aprobado!".
+  const yaFinalizo = useRef(false)
+  const timeoutRef = useRef(null)
+  const finalizarVenta = () => {
+    if (yaFinalizo.current) return
+    yaFinalizo.current = true
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    cobrar('tarjeta', { referenciaTarjeta: mp.paymentId })
+  }
+  useEffect(() => {
+    if (mp.estado !== 'completado' || yaFinalizo.current) return
+    timeoutRef.current = setTimeout(finalizarVenta, 1200)
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
+  }, [mp.estado, mp.paymentId]) // eslint-disable-line
+
   const volver = () => { mp.cancelar(); setMetodoPago('efectivo') }
   const cerrar = () => { mp.cancelar(); setMetodoPago(null) }
 
@@ -79,7 +96,7 @@ export default function ModalCobrarTarjeta({ cobro, total, mensaje, negocio_id, 
             </>
           )}
 
-          {/* Aprobado */}
+          {/* Aprobado — auto-finaliza tras 1.2s; el botón sirve como atajo manual */}
           {mp.estado === 'completado' && (
             <>
               <CheckCircle size={52} color={P.cobrarBg} strokeWidth={1.5} />
@@ -89,8 +106,8 @@ export default function ModalCobrarTarjeta({ cobro, total, mensaje, negocio_id, 
               </div>
               <button
                 style={{ width: '100%', padding: '13px 0', background: P.cobrarBg, color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer' }}
-                onClick={() => cobrar('tarjeta', { referenciaTarjeta: mp.paymentId })}>
-                FINALIZAR VENTA
+                onClick={finalizarVenta}>
+                FINALIZANDO VENTA…
               </button>
             </>
           )}
