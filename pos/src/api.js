@@ -380,7 +380,10 @@ export const api = {
   },
   registrarDevolucion: async (datos) => {
     const online = await isOnline()
-    if (online) return await request('POST', `/ventas/${datos.venta_id}/devolucion`, { items: datos.items })
+    if (online) return await request('POST', `/ventas/${datos.venta_id}/devolucion`, {
+      items: datos.items,
+      monto_efectivo_devuelto: datos.monto_efectivo_devuelto || 0,
+    })
     return { error: 'Sin conexión — las devoluciones requieren conexión al servidor' }
   },
 
