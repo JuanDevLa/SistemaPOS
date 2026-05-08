@@ -544,9 +544,9 @@ export const api = {
 
   // Mercado Pago Point Smart 2
   mpCrearIntento: async (monto, referencia_externa, descripcion) =>
-    await request('POST', '/api/mp/payment-intents', { monto, referencia_externa, descripcion }),
+    await request('POST', '/mp/payment-intents', { monto, referencia_externa, descripcion }),
   mpObtenerIntento: async (id) =>
-    await request('GET', `/api/mp/payment-intents/${id}`),
+    await request('GET', `/mp/payment-intents/${id}`),
   mpCancelarIntento: async () =>
-    await request('DELETE', '/api/mp/payment-intents'),
+    await request('DELETE', '/mp/payment-intents'),
 }
