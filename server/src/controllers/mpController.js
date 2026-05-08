@@ -21,6 +21,7 @@ async function crearIntentoPago(req, reply) {
   const device_id = process.env.MP_DEVICE_ID
 
   if (!monto || isNaN(monto) || monto <= 0) return reply.status(400).send({ error: 'monto es requerido y debe ser mayor a 0' })
+  if (monto > 30000) return reply.status(400).send({ error: 'No es posible procesar un pago mayor a $30,000 con terminal. Divide el pago o usa otro método.' })
   if (!device_id) return reply.status(500).send({ error: 'MP_DEVICE_ID no configurado' })
 
   const body = {

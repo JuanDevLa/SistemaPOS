@@ -84,7 +84,7 @@ const loginAdmin = async (request, reply, fastify) => {
 
     const token = fastify.jwt.sign(
       { id: user.id, nombre: user.nombre, rol: user.rol, jti: crypto.randomUUID() },
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     )
 
     return reply.send({
