@@ -23,12 +23,17 @@ async function crearIntentoPago(req, reply) {
   if (!monto || isNaN(monto) || monto <= 0) return reply.status(400).send({ error: 'monto es requerido y debe ser mayor a 0' })
   if (!device_id) return reply.status(500).send({ error: 'MP_DEVICE_ID no configurado' })
 
+  const amountCents = Math.round(monto * 100)
   const body = {
-    amount: Math.round(monto * 100) / 100,
-    description: descripcion || 'Punto de Venta',
+    amount: amountCents,
     additional_info: {
       external_reference: referencia_externa || `PDV-${Date.now()}`,
       print_on_terminal: true,
+      items: [{
+        title: descripcion || 'Punto de Venta',
+        quantity: 1,
+        unit_price: amountCents,
+      }],
     },
   }
 
