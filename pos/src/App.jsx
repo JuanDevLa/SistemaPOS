@@ -79,7 +79,9 @@ export default function App() {
     }
   }
 
-  const refrescarUsuario = async () => {
+  // Memoizado para que el useEffect de VentaScreen que depende de esta función
+  // no se re-dispare en cada render de App (causaba llamadas redundantes a /auth/me).
+  const refrescarUsuario = useCallback(async () => {
     try {
       const fresco = await api.me()
       if (!fresco || fresco.error) return
@@ -88,7 +90,7 @@ export default function App() {
     } catch (err) {
       console.error('Error al refrescar usuario:', err)
     }
-  }
+  }, [])
 
   // Verificar si hay turno abierto tras login
   useEffect(() => {

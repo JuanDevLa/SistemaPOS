@@ -37,9 +37,14 @@ fastify.register(require('@fastify/jwt'), {
   secret: process.env.JWT_SECRET
 })
 
+// Rate limit dimensionado para el uso real del POS:
+// - polling MP cada 2s durante un cobro (~30/min)
+// - cache productos al login
+// - dashboard, inventario bajo, recargas, etc.
+// 1500/min deja margen cómodo para 1-2 cajas activas + admin web por la misma IP pública.
 fastify.register(require('@fastify/rate-limit'), {
   global: true,
-  max: 200,
+  max: 1500,
   timeWindow: '1 minute',
   allowList: NODE_ENV !== 'production' ? ['127.0.0.1', '::1'] : []
 })

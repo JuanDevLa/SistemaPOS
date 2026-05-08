@@ -10,6 +10,11 @@ export function useMercadoPagoPoint() {
   const [paymentId, setPaymentId] = useState(null)
   const [errorMsg, setErrorMsg]   = useState(null)
   const pollingRef                = useRef(null)
+  const estadoRef                 = useRef('idle')
+
+  // Mantener un ref con el estado actual para que cancelar() siempre vea valor fresco
+  // (su closure captura el estado al momento de definirse).
+  estadoRef.current = estado
 
   const limpiarPolling = () => {
     if (pollingRef.current) clearInterval(pollingRef.current)
@@ -88,13 +93,14 @@ export function useMercadoPagoPoint() {
 
   const cancelar = useCallback(async () => {
     limpiarPolling()
-    if (!MODO_PRUEBA && estado === 'procesando') {
+    // Usar ref: el closure podría haber capturado un estado obsoleto (p.ej. 'idle' al montar).
+    if (!MODO_PRUEBA && estadoRef.current === 'procesando') {
       await api.mpCancelarIntento().catch(() => {})
     }
     setEstado('idle')
     setPaymentId(null)
     setErrorMsg(null)
-  }, [estado])
+  }, [])
 
   return { estado, paymentId, errorMsg, iniciarPago, cancelar, MODO_PRUEBA }
 }

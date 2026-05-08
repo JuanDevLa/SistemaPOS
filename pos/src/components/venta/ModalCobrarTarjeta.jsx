@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { CheckCircle, XCircle, Loader2, CreditCard, X } from 'lucide-react'
 
 const FONT = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
@@ -17,10 +17,16 @@ const iconBtn = { background: 'none', border: 'none', color: 'rgba(255,255,255,0
 export default function ModalCobrarTarjeta({ cobro, total, mensaje, negocio_id, mp }) {
   const { setMetodoPago, cobrar } = cobro
 
-  // Dispara el pago automáticamente al abrir el modal
+  // Dispara el pago automáticamente al abrir el modal.
+  // El ref evita la doble ejecución de StrictMode en dev (causaría error 2205 "device busy" en MP).
+  // No usar cleanup aquí: en StrictMode el ciclo unmount/remount lo dispararía y dejaría la terminal
+  // sin intent. Los botones Cancelar/Volver/Cerrar/Reintentar ya llaman mp.cancelar() explícito.
+  const yaInicio = useRef(false)
   useEffect(() => {
+    if (yaInicio.current) return
+    yaInicio.current = true
     const ref = `PDV-${negocio_id}-${Date.now()}`
-    mp.iniciarPago(total, ref)
+    mp.iniciarPago(total, ref).catch(() => {})
   }, []) // eslint-disable-line
 
   const volver = () => { mp.cancelar(); setMetodoPago('efectivo') }
