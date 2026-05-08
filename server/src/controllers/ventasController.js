@@ -242,13 +242,17 @@ const crear = async (request, reply) => {
       )
     }
 
-    // Si viene cliente_id con método crédito, materializar el fiado (caso típico del sync offline).
+    // Materializar crédito — online y offline sync.
+    // El monto es total - efectivo_recibido para cubrir pagos mixtos (algo en cash + resto a crédito).
     if (cliente_id && metodo_pago === 'credito') {
-      await client.query(
-        `INSERT INTO creditos (cliente_id, venta_id, negocio_id, monto_original, saldo_pendiente, estado)
-         VALUES ($1, $2, $3, $4, $4, 'pendiente')`,
-        [cliente_id, venta_id, negocio_id, total]
-      )
+      const montoCredito = round2(total - parseFloat(efectivo_recibido || 0))
+      if (montoCredito > 0) {
+        await client.query(
+          `INSERT INTO creditos (cliente_id, venta_id, negocio_id, monto_original, saldo_pendiente, estado)
+           VALUES ($1, $2, $3, $4, $4, 'pendiente')`,
+          [cliente_id, venta_id, negocio_id, montoCredito]
+        )
+      }
     }
 
     await audit.registrar(client, {

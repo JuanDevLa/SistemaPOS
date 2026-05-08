@@ -87,9 +87,9 @@ export default function FormularioCliente({ form, formOriginal, modoNuevo, selec
           {form.credito_habilitado && (
             <div style={s.creditoLimite}>
               <label style={{ ...s.label, width: 100 }}>Límite de crédito</label>
-              <select style={{ ...s.input, width: 120 }} value={form.limite_tipo} onChange={e => set('limite_tipo', e.target.value)}>
-                <option value="limitado">limitado</option>
-                <option value="ilimitado">De máximo:</option>
+              <select style={{ ...s.input, width: 140 }} value={form.limite_tipo} onChange={e => set('limite_tipo', e.target.value)}>
+                <option value="limitado">Crédito Máximo:</option>
+                <option value="ilimitado">Sin límite</option>
               </select>
               {form.limite_tipo === 'limitado' && (
                 <input style={{ ...s.input, width: 90, marginLeft: 4 }} type="number" min="0" step="0.01"

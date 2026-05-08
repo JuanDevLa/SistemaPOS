@@ -1,6 +1,6 @@
 {
   "name": "pdv-pos",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "App de escritorio Windows para el punto de venta",
   "main": "electron/main.js",
   "scripts": {
@@ -30,7 +30,7 @@
     ],
     "publish": {
       "provider": "generic",
-      "url": "http://206.81.5.94/updates"
+      "url": "https://pos-farmacia.duckdns.org/updates"
     },
     "win": {
       "target": "nsis"
@@ -46,6 +46,7 @@
   "dependencies": {
     "better-sqlite3": "^11.6.0",
     "electron-updater": "^6.3.9",
+    "iconv-lite": "^0.7.2",
     "lucide-react": "^1.11.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

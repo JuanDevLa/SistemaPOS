@@ -71,6 +71,7 @@ fastify.register(require('./routes/audit'))
 fastify.register(require('./routes/unidades'))
 fastify.register(require('./routes/lotes'))
 fastify.register(require('./routes/licencias'))
+fastify.register(require('./routes/mp'))
 
 const tokenRevokeService = require('./services/tokenRevokeService')
 

@@ -77,36 +77,44 @@ export default function EstadoCuenta({ estadoCuenta, busqueda, onBuscar, busqued
                   </tr>
                 </thead>
                 <tbody>
-                  {estadoCuenta.creditos.map(cr => {
-                    const activo = creditoSeleccionado?.id === cr.id
-                    return (
-                      <tr key={`cr-${cr.id}`}
-                        style={{ ...s.tr, background: activo ? '#1e5f3a' : '', color: activo ? '#fff' : '', cursor: 'pointer' }}
-                        onClick={() => onSeleccionarCredito(cr)}
-                      >
-                        <td style={s.td}>{new Date(cr.creado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</td>
-                        <td style={s.td}>{cr.venta_id}</td>
-                        <td style={s.td}><span style={s.badgeVenta}>VENTA</span></td>
-                        <td style={{ ...s.td, textAlign: 'right', color: activo ? '#fff' : '#1a7a3a', fontWeight: 700 }}>
-                          +${parseFloat(cr.monto_original).toFixed(2)}
-                        </td>
-                        <td style={{ ...s.td, textAlign: 'right' }}>${parseFloat(cr.saldo_pendiente).toFixed(2)}</td>
-                        <td style={s.td}>{cr.cajero || '—'}</td>
-                      </tr>
-                    )
-                  })}
-                  {estadoCuenta.abonos.map(ab => (
-                    <tr key={`ab-${ab.id}`} style={s.tr}>
-                      <td style={s.td}>{new Date(ab.creado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</td>
-                      <td style={s.td}>—</td>
-                      <td style={s.td}><span style={s.badgeAbono}>ABONO</span></td>
-                      <td style={{ ...s.td, textAlign: 'right', color: '#1d4ed8', fontWeight: 700 }}>
-                        -${parseFloat(ab.monto).toFixed(2)}
-                      </td>
-                      <td style={s.td}>—</td>
-                      <td style={s.td}>{ab.cajero || '—'}</td>
-                    </tr>
-                  ))}
+                  {[
+                    ...estadoCuenta.creditos.map(cr => ({ ...cr, _tipo: 'venta' })),
+                    ...estadoCuenta.abonos.map(ab => ({ ...ab, _tipo: 'abono' })),
+                  ]
+                    .sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en))
+                    .map(mov => {
+                      if (mov._tipo === 'venta') {
+                        const activo = creditoSeleccionado?.id === mov.id
+                        return (
+                          <tr key={`cr-${mov.id}`}
+                            style={{ ...s.tr, background: activo ? '#1e5f3a' : '', color: activo ? '#fff' : '', cursor: 'pointer' }}
+                            onClick={() => onSeleccionarCredito(mov)}
+                          >
+                            <td style={s.td}>{new Date(mov.creado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                            <td style={s.td}>{mov.venta_id}</td>
+                            <td style={s.td}><span style={s.badgeVenta}>VENTA</span></td>
+                            <td style={{ ...s.td, textAlign: 'right', color: activo ? '#fff' : '#1a7a3a', fontWeight: 700 }}>
+                              +${parseFloat(mov.monto_original).toFixed(2)}
+                            </td>
+                            <td style={{ ...s.td, textAlign: 'right' }}>${parseFloat(mov.saldo_pendiente).toFixed(2)}</td>
+                            <td style={s.td}>{mov.cajero || '—'}</td>
+                          </tr>
+                        )
+                      }
+                      return (
+                        <tr key={`ab-${mov.id}`} style={s.tr}>
+                          <td style={s.td}>{new Date(mov.creado_en).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                          <td style={s.td}>Ab.#{mov.credito_id}</td>
+                          <td style={s.td}><span style={s.badgeAbono}>ABONO</span></td>
+                          <td style={{ ...s.td, textAlign: 'right', color: '#1d4ed8', fontWeight: 700 }}>
+                            -${parseFloat(mov.monto).toFixed(2)}
+                          </td>
+                          <td style={s.td}>—</td>
+                          <td style={s.td}>{mov.cajero || '—'}</td>
+                        </tr>
+                      )
+                    })
+                  }
                   {estadoCuenta.creditos.length === 0 && estadoCuenta.abonos.length === 0 && (
                     <tr><td colSpan={6} style={{ textAlign: 'center', padding: 20, color: '#999' }}>Sin movimientos</td></tr>
                   )}

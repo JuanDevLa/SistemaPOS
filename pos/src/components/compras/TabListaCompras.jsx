@@ -21,6 +21,9 @@ export default function TabListaCompras({ usuario, onIrAOrdenes, productoPresele
   const [errorBus, setErrorBus]       = useState('')
   const [agregando, setAgregando]     = useState(false)
   const [mensajeOk, setMensajeOk]     = useState('')
+  const [productoAgregar, setProductoAgregar] = useState(null)
+  const [cantidadAgregar, setCantidadAgregar] = useState('1')
+  const cantidadRef = useRef()
   // Modal orden
   const [modalOrden, setModalOrden]   = useState(false)
   const [busqProv, setBusqProv]       = useState('')
@@ -75,16 +78,25 @@ export default function TabListaCompras({ usuario, onIrAOrdenes, productoPresele
     } catch { setResultados([]) }
   }
 
-  const agregarProducto = async (p) => {
+  const seleccionarParaAgregar = (p) => {
+    setProductoAgregar(p)
+    setCantidadAgregar('1')
+    setTimeout(() => cantidadRef.current?.select(), 30)
+  }
+
+  const confirmarAgregarProducto = async () => {
+    if (!productoAgregar) return
+    const cantidad = parseInt(cantidadAgregar) || 1
     setAgregando(true); setErrorBus('')
     try {
-      const res = await api.agregarListaCompras({
+      await api.agregarListaCompras({
         negocio_id:   usuario.negocio_id,
-        producto_id:  p.id,
-        proveedor_id: p.proveedor_id || null,
-        cantidad:     1,
+        producto_id:  productoAgregar.id,
+        proveedor_id: productoAgregar.proveedor_id || null,
+        cantidad,
       })
       setBusqueda(''); setResultados([])
+      setProductoAgregar(null); setCantidadAgregar('1')
       setMostrarBuscador(false)
       await cargar()
     } catch(e) {
@@ -167,8 +179,8 @@ export default function TabListaCompras({ usuario, onIrAOrdenes, productoPresele
 
       setSelec(new Set())
       setModalOrden(false)
-      setMensajeOk(`Orden #${res.orden_id} creada para ${provSel.nombre}. Puedes verla en "Ordenes de Compra".`)
       await cargar()
+      onIrAOrdenes?.()
     } catch(e) {
       alert(e.message)
     } finally {
@@ -236,15 +248,36 @@ export default function TabListaCompras({ usuario, onIrAOrdenes, productoPresele
             </div>
           )}
           {agregando && <div style={{ padding: '6px 10px', color: '#555', fontSize: 12 }}>Agregando...</div>}
-          {resultados.map(p => (
+          {!productoAgregar && resultados.map(p => (
             <div key={p.id} style={{ ...e.resultadoFila, opacity: agregando ? 0.5 : 1 }}
-              onClick={() => !agregando && agregarProducto(p)}>
+              onClick={() => !agregando && seleccionarParaAgregar(p)}>
               <span style={e.resCod}>{p.codigo_barras || '—'}</span>
               <span style={e.resNom}>{p.nombre}</span>
               <span style={e.resPrc}>${parseFloat(p.precio).toFixed(2)}</span>
             </div>
           ))}
-          {busqueda && resultados.length === 0 && !agregando && (
+          {productoAgregar && (
+            <div style={{ padding: '8px 12px', background: '#EFF6FF', borderTop: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#1e3a5f', flex: 1 }}>{productoAgregar.nombre}</span>
+              <label style={{ fontSize: 11, color: '#444' }}>Cantidad:</label>
+              <input
+                ref={cantidadRef}
+                className="pos-input"
+                type="number" min="1" step="1"
+                style={{ width: 70, fontSize: 13, padding: '3px 6px', textAlign: 'center' }}
+                value={cantidadAgregar}
+                onChange={ev => setCantidadAgregar(ev.target.value)}
+                onKeyDown={ev => { if (ev.key === 'Enter') confirmarAgregarProducto(); if (ev.key === 'Escape') setProductoAgregar(null) }}
+              />
+              <button className="pos-btn pos-btn-success" style={{ fontSize: 11, padding: '3px 12px' }}
+                onClick={confirmarAgregarProducto} disabled={agregando}>
+                {agregando ? 'Agregando...' : 'Agregar'}
+              </button>
+              <button className="pos-btn" style={{ fontSize: 11, padding: '3px 10px' }}
+                onClick={() => setProductoAgregar(null)}>✕</button>
+            </div>
+          )}
+          {!productoAgregar && busqueda && resultados.length === 0 && !agregando && (
             <div style={{ padding: '8px 12px', color: '#999', fontSize: 12 }}>Sin resultados</div>
           )}
         </div>

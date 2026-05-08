@@ -10,7 +10,7 @@ import FormularioCliente from '../components/clientes/FormularioCliente'
 const FORM_VACIO = {
   nombre: '', apellidos: '', telefono: '', email: '',
   domicilio1: '', domicilio2: '', colonia: '',
-  municipio: '', estado_residencia: '', codigo_postal: '',
+  municipio: '', estado_residencia: 'Chiapas', codigo_postal: '',
   notas: '', credito_habilitado: false,
   limite_tipo: 'ilimitado', limite_credito: 0
 }

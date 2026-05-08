@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api, setOnUnauthorized, setOnPermisoDenegado, setToken } from './api'
 import LoginScreen from './screens/LoginScreen'
 import VentaScreen from './screens/VentaScreen'
@@ -13,15 +13,15 @@ import UpdateNotification from './components/UpdateNotification'
 export default function App() {
   const [licencia, setLicencia] = useState(null) // null = verificando
 
-  useEffect(() => {
-    const check = async () => {
-      // En navegador puro (sin Electron), saltar verificación
-      if (!window.licenciaAPI) { setLicencia({ ok: true, estado: 'dev' }); return }
-      const resultado = await window.licenciaAPI.verificar()
-      setLicencia(resultado)
-    }
-    check()
+  const verificarLicencia = useCallback(async () => {
+    setLicencia(null)
+    // En navegador puro (sin Electron), saltar verificación
+    if (!window.licenciaAPI) { setLicencia({ ok: true, estado: 'dev' }); return }
+    const resultado = await window.licenciaAPI.verificar()
+    setLicencia(resultado)
   }, [])
+
+  useEffect(() => { verificarLicencia() }, [verificarLicencia])
 
   const [usuario, setUsuario] = useState(null)
   const [checkingTurno, setCheckingTurno] = useState(false)
@@ -170,7 +170,7 @@ export default function App() {
     if (licencia.estado === 'sin_licencia') {
       return <ActivacionScreen onActivar={setLicencia} />
     }
-    return <LicenciaVencidaScreen licencia={licencia} onReintentar={() => setLicencia(null)} />
+    return <LicenciaVencidaScreen licencia={licencia} onReintentar={verificarLicencia} />
   }
 
   if (!usuario) {

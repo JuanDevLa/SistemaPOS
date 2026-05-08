@@ -6,7 +6,7 @@ const fs = require('fs')
 // Esta clave siempre funciona, incluso sin servidor ni internet.
 // Úsala para demos, instalaciones propias y clientes VIP.
 // CAMBIA ESTE VALOR antes de distribuir al público.
-const PDV_MASTER_KEY = 'Noriega-Dev-99$Master'
+const PDV_MASTER_KEY = 'NORIEGA-DEV-99$MASTER'
 
 // Días sin conexión antes de mostrar advertencia / bloquear
 const GRACE_WARN  = 3

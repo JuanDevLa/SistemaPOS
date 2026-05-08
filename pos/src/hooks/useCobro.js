@@ -97,16 +97,7 @@ export function useCobro({ total, carrito, descuentoMonto, cart, usuario, corteA
 
     if (!res.venta_id) { setMensaje('Error al registrar venta'); return }
 
-    if (metodoAUsar === 'credito' && clienteCredito) {
-      const montoDeuda = total - pagadoCredito
-      if (montoDeuda > 0) {
-        try {
-          await api.registrarCredito({ cliente_id: clienteCredito.id, venta_id: res.venta_id, negocio_id: usuario.negocio_id, monto: montoDeuda })
-        } catch(e) {
-          setMensaje(`Venta registrada (Ticket: ${res.venta_id}) pero error al registrar crédito: ${e.message}`)
-        }
-      }
-    }
+
 
     setTicket({ ...res, items: carrito, cambio: res.cambio })
     cart.limpiarCarritoActivo()

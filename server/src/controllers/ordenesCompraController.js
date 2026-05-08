@@ -96,9 +96,9 @@ const recibir = async (req, reply) => {
 
     // Crear entrada de mercancía
     const { rows: [entrada] } = await client.query(`
-      INSERT INTO entradas_mercancia (negocio_id, proveedor, proveedor_id, notas)
-      VALUES ($1, $2, $3, $4) RETURNING id
-    `, [orden.negocio_id, orden.proveedor_nombre, orden.proveedor_id, notas || null])
+      INSERT INTO entradas_mercancia (negocio_id, usuario_id, proveedor, proveedor_id, notas)
+      VALUES ($1, $2, $3, $4, $5) RETURNING id
+    `, [orden.negocio_id, req.user?.id || null, orden.proveedor_nombre, orden.proveedor_id, notas || null])
 
     // Obtener cuáles productos controlan lote
     const productoIds = items.map(i => i.producto_id).filter(Boolean)
@@ -135,9 +135,9 @@ const recibir = async (req, reply) => {
       }
 
       await client.query(`
-        INSERT INTO movimientos_inventario (producto_id, negocio_id, tipo, cantidad, referencia_id, notas)
-        VALUES ($1, $2, 'entrada', $3, $4, $5)
-      `, [item.producto_id, orden.negocio_id, item.cantidad_recibida, parseInt(id), `Orden de compra #${id}`])
+        INSERT INTO movimientos_inventario (producto_id, negocio_id, tipo, cantidad, referencia_id, usuario_id, notas)
+        VALUES ($1, $2, 'entrada', $3, $4, $5, $6)
+      `, [item.producto_id, orden.negocio_id, item.cantidad_recibida, parseInt(id), req.user?.id || null, `Orden de compra #${id}`])
 
       // Actualizar costo/precio si se indicó
       if (item.costo_unitario) {

@@ -1,5 +1,4 @@
-import { ShieldAlert, RefreshCw, Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { ShieldAlert, RefreshCw } from 'lucide-react'
 
 const estilos = {
   root: {
@@ -35,15 +34,6 @@ const MENSAJES = {
 }
 
 export default function LicenciaVencidaScreen({ licencia, onReintentar }) {
-  const [cargando, setCargando] = useState(false)
-
-  const handleReintentar = async () => {
-    setCargando(true)
-    await new Promise(r => setTimeout(r, 800))
-    setCargando(false)
-    onReintentar()
-  }
-
   const mensaje = licencia.mensaje || MENSAJES[licencia.estado] || 'Licencia inválida. Contacta a soporte.'
 
   return (
@@ -61,11 +51,8 @@ export default function LicenciaVencidaScreen({ licencia, onReintentar }) {
 
         <p style={estilos.mensaje}>{mensaje}</p>
 
-        <button style={estilos.boton} onClick={handleReintentar} disabled={cargando}>
-          {cargando
-            ? <><Loader2 size={16} /> Verificando...</>
-            : <><RefreshCw size={16} /> Reintentar verificación</>
-          }
+        <button style={estilos.boton} onClick={onReintentar}>
+          <RefreshCw size={16} /> Reintentar verificación
         </button>
 
         <p style={estilos.footer}>

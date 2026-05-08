@@ -298,10 +298,10 @@ function VistaOrdenes({ usuario }) {
 
 // ── Sub-tabs: Órdenes | Nueva Entrada ─────────────────────────────────────────
 export default function TabOrdenesCompra({ usuario, productoPreseleccionado, onProductoAgregado }) {
-  const [subTab, setSubTab] = useState(productoPreseleccionado ? 'entrada' : 'ordenes')
+  const [subTab, setSubTab] = useState('ordenes')
 
   useEffect(() => {
-    if (productoPreseleccionado) setSubTab('entrada')
+    if (productoPreseleccionado?.id) setSubTab('entrada')
   }, [productoPreseleccionado])
 
   return (
