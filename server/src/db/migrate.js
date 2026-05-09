@@ -597,6 +597,69 @@ CREATE TABLE IF NOT EXISTS licencia_maquinas (
 CREATE INDEX IF NOT EXISTS idx_licencias_clave ON licencias(clave);
 CREATE INDEX IF NOT EXISTS idx_licencia_maquinas_lic ON licencia_maquinas(licencia_id);
 
+-- ============================================================
+-- Multi-tenant: productos por negocio (aislamiento estricto)
+-- Cada negocio mantiene su propio catálogo. Mismo código de barras
+-- puede coexistir en distintos negocios (Coca-Cola en farmacia y
+-- en jerseys son filas distintas con su propio precio/costo).
+-- ============================================================
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS negocio_id INT REFERENCES negocios(id) ON DELETE CASCADE;
+
+-- Backfill: asignar negocio según primer registro de inventario que tenga el producto
+UPDATE productos p
+SET negocio_id = sub.negocio_id
+FROM (
+  SELECT DISTINCT ON (producto_id) producto_id, negocio_id
+  FROM inventario
+  ORDER BY producto_id, negocio_id ASC
+) sub
+WHERE p.id = sub.producto_id AND p.negocio_id IS NULL;
+
+-- Productos huérfanos (sin inventario) → primer negocio existente
+UPDATE productos
+SET negocio_id = (SELECT MIN(id) FROM negocios)
+WHERE negocio_id IS NULL;
+
+-- Una vez backfilleados, exigir negocio_id NOT NULL
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name='productos' AND column_name='negocio_id' AND is_nullable='YES')
+     AND NOT EXISTS (SELECT 1 FROM productos WHERE negocio_id IS NULL) THEN
+    ALTER TABLE productos ALTER COLUMN negocio_id SET NOT NULL;
+  END IF;
+END $$;
+
+-- Reemplazar UNIQUE(codigo_barras) global por UNIQUE(codigo_barras, negocio_id)
+ALTER TABLE productos DROP CONSTRAINT IF EXISTS productos_codigo_barras_key;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'productos_codigo_barras_negocio_key') THEN
+    ALTER TABLE productos ADD CONSTRAINT productos_codigo_barras_negocio_key
+      UNIQUE (codigo_barras, negocio_id);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_productos_negocio ON productos(negocio_id, activo);
+
+-- ============================================================
+-- Mercado Pago: estado autoritativo de payment-intents
+-- Alimentado por el webhook (notification_url). El POS lee de aquí
+-- en vez de pollear MP directamente, evitando que un cobro aprobado
+-- en la terminal quede colgado en el POS.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mp_intent_estados (
+  intent_id      VARCHAR(64) PRIMARY KEY,
+  estado         VARCHAR(40),
+  payment_id     VARCHAR(64),
+  payment_state  VARCHAR(40),
+  monto          DECIMAL(10,2),
+  raw            JSONB,
+  recibido_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_mp_intent_actualizado ON mp_intent_estados(actualizado_en DESC);
+
 -- Trigger: mantener actualizado_en actualizado en UPDATE (productos, inventario, clientes, config_recargas)
 CREATE OR REPLACE FUNCTION fn_actualizar_timestamp()
 RETURNS TRIGGER AS $$
@@ -610,7 +673,7 @@ DO $$
 DECLARE
   t TEXT;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['productos','inventario','clientes','config_recargas']
+  FOREACH t IN ARRAY ARRAY['productos','inventario','clientes','config_recargas','mp_intent_estados']
   LOOP
     IF NOT EXISTS (
       SELECT 1 FROM pg_trigger WHERE tgname = 'trg_' || t || '_actualizado_en'

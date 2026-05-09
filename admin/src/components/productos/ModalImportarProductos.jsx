@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api } from '../../api'
 
-export default function ModalImportarProductos({ importPreview, onSuccess, onClose }) {
+export default function ModalImportarProductos({ importPreview, negocioId, onSuccess, onClose }) {
   const [importando, setImportando]   = useState(false)
   const [importResult, setImportResult] = useState(null)
 
@@ -9,7 +9,7 @@ export default function ModalImportarProductos({ importPreview, onSuccess, onClo
     if (!importPreview?.length) return
     setImportando(true)
     try {
-      const res = await api.importarProductos(importPreview)
+      const res = await api.importarProductos(importPreview, negocioId)
       if (res.error) setImportResult({ error: res.error })
       else { setImportResult(res); onSuccess() }
     } catch (e) { setImportResult({ error: e.message || 'Error al importar' }) }

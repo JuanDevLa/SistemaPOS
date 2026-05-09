@@ -58,8 +58,8 @@ export const api = {
     request('PUT', `/productos/${id}`, data),
   desactivarProducto: (id) =>
     request('DELETE', `/productos/${id}`),
-  importarProductos: (productos) =>
-    request('POST', '/productos/importar', { productos }),
+  importarProductos: (productos, negocio_id) =>
+    request('POST', `/productos/importar?negocio_id=${negocio_id}`, { productos }),
   crearLoteInicial: (data) =>
     request('POST', '/lotes', data),
 

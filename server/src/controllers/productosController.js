@@ -1,30 +1,33 @@
 const pool = require('../db/client')
 const audit = require('../services/auditService')
 
-// Listar todos los productos activos.
-// Si llega `negocio_id`, hace LEFT JOIN con inventario para incluir stock actual.
-// Sin negocio_id, retorna solo el catálogo (caso admin global).
+// Resuelve el negocio_id efectivo: admin puede pasar query.negocio_id explícito
+// (para auditar otro negocio), todos los demás roles quedan atados al JWT.
+const resolverNegocioId = (request) => {
+  const userNegocioId = request.user?.negocio_id || null
+  const qRaw = request.query?.negocio_id
+  const queryNegocioId = qRaw ? parseInt(qRaw) : null
+  if (request.user?.rol === 'admin' && queryNegocioId) return queryNegocioId
+  return userNegocioId
+}
+
+// Listar productos activos del negocio. Cada negocio es un catálogo independiente.
+// Hace LEFT JOIN con inventario para incluir stock actual (puede ser 0 si no hay fila).
 const listar = async (request, reply) => {
-  const { categoria, negocio_id } = request.query
+  const { categoria } = request.query
+  const negocio_id = resolverNegocioId(request)
+  if (!negocio_id) return reply.code(400).send({ error: 'negocio_id requerido' })
 
-  const baseSelect = `
+  const params = [negocio_id]
+  let query = `
     SELECT p.id, p.codigo_barras, p.nombre, p.descripcion, p.precio, p.precio_mayoreo,
-           p.costo, p.categoria, p.departamento_id, p.unidad, p.aplica_iva, p.activo
+           p.costo, p.categoria, p.departamento_id, p.unidad, p.aplica_iva, p.activo,
+           p.negocio_id,
+           COALESCE(i.cantidad, 0) AS stock
+    FROM productos p
+    LEFT JOIN inventario i ON i.producto_id = p.id AND i.negocio_id = $1
+    WHERE p.activo = true AND p.negocio_id = $1
   `
-  let query
-  const params = []
-
-  if (negocio_id) {
-    params.push(negocio_id)
-    query = `
-      ${baseSelect}, COALESCE(i.cantidad, 0) AS stock
-      FROM productos p
-      LEFT JOIN inventario i ON i.producto_id = p.id AND i.negocio_id = $${params.length}
-      WHERE p.activo = true
-    `
-  } else {
-    query = `${baseSelect} FROM productos p WHERE p.activo = true`
-  }
 
   if (categoria) {
     params.push(categoria)
@@ -42,18 +45,23 @@ const listar = async (request, reply) => {
   }
 }
 
-// Buscar por nombre o código de barras
+// Buscar por nombre o código de barras dentro del catálogo del negocio.
 const buscar = async (request, reply) => {
-  const { q, negocio_id } = request.query
+  const { q } = request.query
+  const negocio_id = resolverNegocioId(request)
 
   if (!q) {
     return reply.code(400).send({ error: 'Parámetro de búsqueda requerido' })
+  }
+  if (!negocio_id) {
+    return reply.code(400).send({ error: 'negocio_id requerido' })
   }
 
   try {
     const result = await pool.query(
       `SELECT p.id, p.codigo_barras, p.nombre, p.precio, p.precio_mayoreo, p.costo,
               p.categoria, p.unidad, p.aplica_iva, p.activo, p.departamento_id,
+              p.negocio_id,
               d.nombre AS departamento_nombre,
               COALESCE(i.cantidad, 0)      AS stock_actual,
               COALESCE(i.alerta_minima, 0) AS alerta_minima,
@@ -61,13 +69,13 @@ const buscar = async (request, reply) => {
        FROM productos p
        LEFT JOIN departamentos d ON d.id = p.departamento_id
        LEFT JOIN inventario i ON i.producto_id = p.id AND i.negocio_id = $3
-       WHERE p.activo = true AND (
+       WHERE p.activo = true AND p.negocio_id = $3 AND (
          p.codigo_barras = $1
          OR LOWER(p.nombre) LIKE LOWER($2)
        )
        ORDER BY p.nombre ASC
        LIMIT 20`,
-      [q, `%${q}%`, negocio_id || null]
+      [q, `%${q}%`, negocio_id]
     )
     return reply.send(result.rows)
   } catch (err) {
@@ -76,14 +84,18 @@ const buscar = async (request, reply) => {
   }
 }
 
-// Obtener un producto por ID
+// Obtener un producto por ID, restringido al negocio del usuario
 const obtener = async (request, reply) => {
   const { id } = request.params
+  const negocio_id = resolverNegocioId(request)
+  if (!negocio_id) return reply.code(400).send({ error: 'negocio_id requerido' })
 
   try {
     const result = await pool.query(
-      'SELECT id, codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo, categoria, departamento_id, unidad, aplica_iva, activo FROM productos WHERE id = $1 AND activo = true',
-      [id]
+      `SELECT id, codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo,
+              categoria, departamento_id, unidad, aplica_iva, activo, negocio_id
+       FROM productos WHERE id = $1 AND activo = true AND negocio_id = $2`,
+      [id, negocio_id]
     )
 
     if (result.rows.length === 0) {
@@ -97,33 +109,55 @@ const obtener = async (request, reply) => {
   }
 }
 
-// Crear producto
+// Crear producto (atado al negocio del JWT). Inserta fila inicial en inventario
+// para que el producto siempre tenga existencia 0 visible en su negocio.
 const crear = async (request, reply) => {
   const { codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo, departamento_id, unidad, aplica_iva, controla_lote } = request.body
+  const negocio_id = resolverNegocioId(request)
 
   if (!nombre || !precio) {
     return reply.code(400).send({ error: 'Nombre y precio son requeridos' })
   }
+  if (!negocio_id) {
+    return reply.code(400).send({ error: 'negocio_id requerido' })
+  }
 
+  const client = await pool.connect()
   try {
-    const result = await pool.query(
-      `INSERT INTO productos (codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo, departamento_id, unidad, aplica_iva, controla_lote)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id, codigo_barras, nombre, precio, precio_mayoreo, departamento_id, unidad, aplica_iva, controla_lote, activo`,
-      [codigo_barras || null, nombre, descripcion || null, precio, precio_mayoreo || null, costo || null, departamento_id || null, unidad || 'pieza', aplica_iva || false, controla_lote || false]
+    await client.query('BEGIN')
+
+    const result = await client.query(
+      `INSERT INTO productos (codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo, departamento_id, unidad, aplica_iva, controla_lote, negocio_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, codigo_barras, nombre, precio, precio_mayoreo, departamento_id, unidad, aplica_iva, controla_lote, activo, negocio_id`,
+      [codigo_barras || null, nombre, descripcion || null, precio, precio_mayoreo || null, costo || null, departamento_id || null, unidad || 'pieza', aplica_iva || false, controla_lote || false, negocio_id]
     )
 
+    // Fila inicial de inventario para que el producto sea visible en el catálogo del negocio
+    await client.query(
+      `INSERT INTO inventario (producto_id, negocio_id, cantidad)
+       VALUES ($1, $2, 0)
+       ON CONFLICT (producto_id, negocio_id) DO NOTHING`,
+      [result.rows[0].id, negocio_id]
+    )
+
+    await client.query('COMMIT')
     return reply.code(201).send(result.rows[0])
   } catch (err) {
+    await client.query('ROLLBACK')
+
     if (err.code === '23505') {
-      // El conflicto puede ser por código de barras o nombre. Buscar el producto inactivo y reactivarlo.
+      // Conflicto SOLO dentro del mismo negocio (UNIQUE codigo_barras+negocio_id).
+      // Reactivar producto inactivo del mismo negocio si existe.
       try {
         const conditions = []
-        const params = []
+        const params = [negocio_id]
         if (codigo_barras) { params.push(codigo_barras); conditions.push(`codigo_barras = $${params.length}`) }
         params.push(nombre.trim()); conditions.push(`LOWER(nombre) = LOWER($${params.length})`)
         const dup = await pool.query(
-          `SELECT id FROM productos WHERE activo = false AND (${conditions.join(' OR ')}) LIMIT 1`,
+          `SELECT id FROM productos
+           WHERE activo = false AND negocio_id = $1 AND (${conditions.join(' OR ')})
+           LIMIT 1`,
           params
         )
         if (dup.rows.length > 0) {
@@ -131,30 +165,42 @@ const crear = async (request, reply) => {
             `UPDATE productos SET codigo_barras=$1, nombre=$2, descripcion=$3, precio=$4,
              precio_mayoreo=$5, costo=$6, departamento_id=$7, unidad=$8, aplica_iva=$9,
              controla_lote=$10, activo=true, actualizado_en=CURRENT_TIMESTAMP
-             WHERE id=$11
-             RETURNING id, codigo_barras, nombre, precio, precio_mayoreo, departamento_id, unidad, aplica_iva, controla_lote, activo`,
+             WHERE id=$11 AND negocio_id=$12
+             RETURNING id, codigo_barras, nombre, precio, precio_mayoreo, departamento_id, unidad, aplica_iva, controla_lote, activo, negocio_id`,
             [codigo_barras || null, nombre, descripcion || null, precio, precio_mayoreo || null,
              costo || null, departamento_id || null, unidad || 'pieza', aplica_iva || false,
-             controla_lote || false, dup.rows[0].id]
+             controla_lote || false, dup.rows[0].id, negocio_id]
+          )
+          await pool.query(
+            `INSERT INTO inventario (producto_id, negocio_id, cantidad)
+             VALUES ($1, $2, 0)
+             ON CONFLICT (producto_id, negocio_id) DO NOTHING`,
+            [dup.rows[0].id, negocio_id]
           )
           return reply.code(201).send(reactivado.rows[0])
         }
       } catch (e2) { console.error(e2) }
-      return reply.code(409).send({ error: 'Ya existe un producto activo con ese nombre o código de barras' })
+      return reply.code(409).send({ error: 'Ya existe un producto activo con ese nombre o código de barras en este negocio' })
     }
     console.error(err)
     return reply.code(500).send({ error: 'Error al crear producto' })
+  } finally {
+    client.release()
   }
 }
 
-// Editar producto
+// Editar producto (sólo si pertenece al negocio del usuario)
 const editar = async (request, reply) => {
   const { id } = request.params
   const { codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo, departamento_id, unidad, aplica_iva } = request.body
   const usuario_id = request.user?.id
+  const negocio_id = resolverNegocioId(request)
 
   if (!nombre || !precio) {
     return reply.code(400).send({ error: 'Nombre y precio son requeridos' })
+  }
+  if (!negocio_id) {
+    return reply.code(400).send({ error: 'negocio_id requerido' })
   }
 
   const client = await pool.connect()
@@ -163,8 +209,8 @@ const editar = async (request, reply) => {
 
     const prev = await client.query(
       `SELECT codigo_barras, nombre, precio, precio_mayoreo, costo, departamento_id, unidad, aplica_iva
-       FROM productos WHERE id = $1 AND activo = true`,
-      [id]
+       FROM productos WHERE id = $1 AND activo = true AND negocio_id = $2`,
+      [id, negocio_id]
     )
 
     if (prev.rows.length === 0) {
@@ -177,14 +223,14 @@ const editar = async (request, reply) => {
        SET codigo_barras = $1, nombre = $2, descripcion = $3, precio = $4,
            precio_mayoreo = $5, costo = $6, departamento_id = $7, unidad = $8,
            aplica_iva = $9, actualizado_en = CURRENT_TIMESTAMP
-       WHERE id = $10 AND activo = true
-       RETURNING id, codigo_barras, nombre, precio, precio_mayoreo, departamento_id, unidad, aplica_iva, activo`,
-      [codigo_barras || null, nombre, descripcion || null, precio, precio_mayoreo || null, costo || null, departamento_id || null, unidad || 'pieza', aplica_iva || false, id]
+       WHERE id = $10 AND activo = true AND negocio_id = $11
+       RETURNING id, codigo_barras, nombre, precio, precio_mayoreo, departamento_id, unidad, aplica_iva, activo, negocio_id`,
+      [codigo_barras || null, nombre, descripcion || null, precio, precio_mayoreo || null, costo || null, departamento_id || null, unidad || 'pieza', aplica_iva || false, id, negocio_id]
     )
 
     await audit.registrar(client, {
       usuario_id,
-      negocio_id: null, // productos es global
+      negocio_id,
       accion: 'producto_actualizado',
       tabla: 'productos',
       referencia_id: parseInt(id),
@@ -197,7 +243,7 @@ const editar = async (request, reply) => {
   } catch (err) {
     await client.query('ROLLBACK')
     if (err.code === '23505') {
-      return reply.code(409).send({ error: 'Ya existe un producto con ese código de barras' })
+      return reply.code(409).send({ error: 'Ya existe un producto con ese código de barras en este negocio' })
     }
     console.error(err)
     return reply.code(500).send({ error: 'Error al editar producto' })
@@ -206,44 +252,47 @@ const editar = async (request, reply) => {
   }
 }
 
-// Desactivar producto (soft delete)
+// Desactivar producto (soft delete) — sólo si pertenece al negocio del usuario
 const desactivar = async (request, reply) => {
   const { id } = request.params
+  const negocio_id = resolverNegocioId(request)
+  if (!negocio_id) return reply.code(400).send({ error: 'negocio_id requerido' })
 
   try {
     // Bloquear si el producto está en una venta pendiente (ticket abierto)
     const enUso = await pool.query(
       `SELECT 1 FROM venta_items vi
        JOIN ventas v ON v.id = vi.venta_id
-       WHERE vi.producto_id = $1 AND v.estado = 'pendiente'
+       WHERE vi.producto_id = $1 AND v.negocio_id = $2 AND v.estado = 'pendiente'
        LIMIT 1`,
-      [id]
+      [id, negocio_id]
     )
     if (enUso.rows.length > 0) {
       return reply.code(409).send({ error: 'El producto está en un ticket abierto y no puede eliminarse' })
     }
 
     const result = await pool.query(
-      'UPDATE productos SET activo = false WHERE id = $1 RETURNING id, nombre',
-      [id]
+      `UPDATE productos SET activo = false
+       WHERE id = $1 AND negocio_id = $2
+       RETURNING id, nombre, negocio_id`,
+      [id, negocio_id]
     )
 
     if (result.rows.length === 0) {
       return reply.code(404).send({ error: 'Producto no encontrado' })
     }
 
-    // Registrar movimiento de baja por cada negocio que tenga este producto en inventario
-    const invRows = await pool.query(
-      'SELECT negocio_id, cantidad FROM inventario WHERE producto_id = $1',
-      [id]
+    // Registrar movimiento de baja en el negocio dueño del producto
+    const invRow = await pool.query(
+      'SELECT cantidad FROM inventario WHERE producto_id = $1 AND negocio_id = $2',
+      [id, negocio_id]
     )
-    for (const inv of invRows.rows) {
-      await pool.query(
-        `INSERT INTO movimientos_inventario (producto_id, negocio_id, tipo, cantidad, notas)
-         VALUES ($1, $2, 'baja', 0, $3)`,
-        [id, inv.negocio_id, `Producto desactivado. Stock al momento: ${parseFloat(inv.cantidad)}`]
-      )
-    }
+    const cantidad = invRow.rows[0]?.cantidad ?? 0
+    await pool.query(
+      `INSERT INTO movimientos_inventario (producto_id, negocio_id, tipo, cantidad, notas)
+       VALUES ($1, $2, 'baja', 0, $3)`,
+      [id, negocio_id, `Producto desactivado. Stock al momento: ${parseFloat(cantidad)}`]
+    )
 
     return reply.send({ mensaje: 'Producto desactivado', producto: result.rows[0] })
   } catch (err) {
@@ -252,12 +301,16 @@ const desactivar = async (request, reply) => {
   }
 }
 
-// Importar bulk de productos desde CSV/Excel
+// Importar bulk de productos desde CSV/Excel — todos quedan asignados al negocio del usuario
 const importar = async (request, reply) => {
   const { productos } = request.body
+  const negocio_id = resolverNegocioId(request)
 
   if (!Array.isArray(productos) || productos.length === 0) {
     return reply.code(400).send({ error: 'Lista de productos requerida' })
+  }
+  if (!negocio_id) {
+    return reply.code(400).send({ error: 'negocio_id requerido' })
   }
 
   let creados = 0
@@ -276,9 +329,9 @@ const importar = async (request, reply) => {
 
       try {
         const result = await client.query(
-          `INSERT INTO productos (codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo, departamento_id, unidad, aplica_iva)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           ON CONFLICT (codigo_barras) DO NOTHING
+          `INSERT INTO productos (codigo_barras, nombre, descripcion, precio, precio_mayoreo, costo, departamento_id, unidad, aplica_iva, negocio_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (codigo_barras, negocio_id) DO NOTHING
            RETURNING id`,
           [
             p.codigo_barras || null,
@@ -290,10 +343,20 @@ const importar = async (request, reply) => {
             p.departamento_id ? parseInt(p.departamento_id) : null,
             p.unidad || 'pieza',
             p.aplica_iva || false,
+            negocio_id,
           ]
         )
-        if (result.rows.length > 0) creados++
-        else duplicados++
+        if (result.rows.length > 0) {
+          creados++
+          await client.query(
+            `INSERT INTO inventario (producto_id, negocio_id, cantidad)
+             VALUES ($1, $2, 0)
+             ON CONFLICT (producto_id, negocio_id) DO NOTHING`,
+            [result.rows[0].id, negocio_id]
+          )
+        } else {
+          duplicados++
+        }
       } catch {
         errores.push({ nombre: p.nombre, motivo: 'Error al insertar' })
       }
@@ -311,10 +374,11 @@ const importar = async (request, reply) => {
 }
 
 const catalogo = async (request, reply) => {
-  const { negocio_id, departamento_id } = request.query
+  const { departamento_id } = request.query
+  const negocio_id = resolverNegocioId(request)
   if (!negocio_id) return reply.code(400).send({ error: 'negocio_id requerido' })
 
-  let where = 'p.activo = true'
+  let where = 'p.activo = true AND p.negocio_id = $1'
   const params = [negocio_id]
   if (departamento_id) {
     params.push(departamento_id)

@@ -7,6 +7,7 @@ import ModalImportarProductos from '../components/productos/ModalImportarProduct
 
 export default function ProductosPage() {
   const { usuario } = useAuth()
+  const negocioId = usuario?.negocio_id || 1
   const [productos, setProductos]       = useState([])
   const [departamentos, setDepartamentos] = useState([])
   const [cargando, setCargando]         = useState(true)
@@ -17,12 +18,15 @@ export default function ProductosPage() {
   const [importPreview, setImportPreview] = useState(null)
   const fileInputRef = useRef(null)
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [negocioId])
 
   const cargar = async () => {
     setCargando(true)
     try {
-      const [prods, deps] = await Promise.all([api.listarProductos(), api.listarDepartamentos()])
+      const [prods, deps] = await Promise.all([
+        api.listarProductos({ negocio_id: negocioId }),
+        api.listarDepartamentos(negocioId),
+      ])
       setProductos(Array.isArray(prods) ? prods : [])
       setDepartamentos(Array.isArray(deps) ? deps : [])
     } catch { /* lista vacía si falla */ }
@@ -165,7 +169,7 @@ export default function ProductosPage() {
         <ModalProductoForm
           producto={productoEditar}
           departamentos={departamentos}
-          negocioId={usuario?.negocio_id}
+          negocioId={negocioId}
           onSuccess={cargar}
           onClose={() => setModal(null)}
         />
@@ -174,6 +178,7 @@ export default function ProductosPage() {
       {modal === 'importar' && (
         <ModalImportarProductos
           importPreview={importPreview}
+          negocioId={negocioId}
           onSuccess={cargar}
           onClose={() => { setModal(null); setImportPreview(null) }}
         />

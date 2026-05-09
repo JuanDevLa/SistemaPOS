@@ -116,6 +116,7 @@ export default function ModalProductoForm({ producto, departamentos, negocioId, 
         unidad:          form.unidad,
         aplica_iva:      form.aplica_iva,
         controla_lote:   form.controla_lote,
+        negocio_id:      negocioId,
       }
 
       const res = editandoId

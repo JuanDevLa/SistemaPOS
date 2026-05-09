@@ -549,7 +549,7 @@ export const api = {
   mpCrearIntento: async (monto, referencia_externa, descripcion) =>
     await request('POST', '/mp/payment-intents', { monto, referencia_externa, descripcion }),
   mpObtenerIntento: async (id) =>
-    await request('GET', `/mp/payment-intents/${id}`),
+    await request('GET', `/mp/payment-intents/${id}/estado`),
   mpCancelarIntento: async () =>
     await request('DELETE', '/mp/payment-intents'),
 }
