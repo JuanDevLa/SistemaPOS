@@ -36,7 +36,7 @@ const getApiUrl = () => {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
-      if (cfg.api_url) {
+      if (cfg.api_url && !isDev) {
         _apiUrlCache = cfg.api_url
         return _apiUrlCache
       }

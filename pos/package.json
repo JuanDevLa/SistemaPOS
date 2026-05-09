@@ -1,6 +1,6 @@
 {
   "name": "pdv-pos",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "App de escritorio Windows para el punto de venta",
   "main": "electron/main.js",
   "scripts": {
